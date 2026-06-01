@@ -1,0 +1,34 @@
+{
+  "name": "maxopenballoon-mcp",
+  "version": "1.0.0",
+  "tools": [
+    {
+      "name": "balloon.create",
+      "description": "Create a balloon annotation",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tenant_id": {"type": "string"},
+          "drawing_id": {"type": "string"},
+          "label": {"type": "string"},
+          "geometry": {"type": "object"}
+        },
+        "required": ["tenant_id", "drawing_id", "label", "geometry"]
+      }
+    },
+    {
+      "name": "revision.diff",
+      "description": "Get diff between drawing revisions",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tenant_id": {"type": "string"},
+          "drawing_id": {"type": "string"},
+          "left_revision": {"type": "string"},
+          "right_revision": {"type": "string"}
+        },
+        "required": ["tenant_id", "drawing_id", "left_revision", "right_revision"]
+      }
+    }
+  ]
+}

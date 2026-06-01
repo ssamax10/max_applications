@@ -1,0 +1,23 @@
+openapi: 3.1.0
+info:
+  title: Drawing Service API
+  version: 1.0.0
+servers:
+  - url: /drawing
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: OK
+  /tenant-context:
+    get:
+      parameters:
+        - in: header
+          name: X-Tenant-ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant context

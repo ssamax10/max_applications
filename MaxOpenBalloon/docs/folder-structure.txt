@@ -1,0 +1,28 @@
+MaxOpenBalloon/
+├── apps/
+│   └── frontend/
+├── services/
+│   ├── drawing-service/
+│   ├── geometry-service/
+│   ├── balloon-service/
+│   ├── ai-service/
+│   ├── mcp-service/
+│   ├── revision-service/
+│   └── dwg-translation-service/
+├── contracts/
+│   ├── openapi/
+│   ├── events/
+│   ├── mcp/
+│   ├── openfga-model.fga
+│   └── oidc-authentik.env.example
+├── db/
+│   └── schemas/
+├── deploy/
+│   ├── docker/
+│   ├── helm/
+│   ├── argocd/
+│   └── k3s/
+├── docs/
+│   └── adr/
+├── compliance/
+└── .github/workflows/
