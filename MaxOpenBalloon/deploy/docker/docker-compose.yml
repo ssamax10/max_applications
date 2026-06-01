@@ -1,0 +1,105 @@
+services:
+  frontend:
+    build:
+      context: ../../apps/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - drawing-service
+
+  drawing-service:
+    build:
+      context: ../../services/drawing-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres/maxopenballoon?host=postgres
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      OIDC_ISSUER: http://authentik:9000/application/o/maxopenballoon/
+      OPENFGA_URL: http://openfga:8080
+    ports:
+      - "8001:8000"
+    depends_on:
+      - postgres
+      - redis
+      - minio
+      - authentik
+      - openfga
+
+  geometry-service:
+    build:
+      context: ../../services/geometry-service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8000"
+
+  balloon-service:
+    build:
+      context: ../../services/balloon-service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8000"
+
+  ai-service:
+    build:
+      context: ../../services/ai-service
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8000"
+
+  mcp-service:
+    build:
+      context: ../../services/mcp-service
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8000"
+
+  revision-service:
+    build:
+      context: ../../services/revision-service
+      dockerfile: Dockerfile
+    ports:
+      - "8006:8000"
+
+  dwg-translation-service:
+    build:
+      context: ../../services/dwg-translation-service
+      dockerfile: Dockerfile
+    ports:
+      - "8007:8000"
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: maxopenballoon
+      POSTGRES_USER: max
+      POSTGRES_PASSWORD: draw
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  openfga:
+    image: openfga/openfga:latest
+    command: run
+    ports:
+      - "8080:8080"
+
+  authentik:
+    image: ghcr.io/goauthentik/server:2025.2
+    ports:
+      - "9000:9000"

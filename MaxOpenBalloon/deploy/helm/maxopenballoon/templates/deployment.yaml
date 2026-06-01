@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}-drawing-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}-drawing-service
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}-drawing-service
+    spec:
+      containers:
+        - name: drawing-service
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8000

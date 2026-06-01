@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maxopenballoon/contracts/events/domain-event.schema.json",
+  "title": "DomainEvent",
+  "type": "object",
+  "properties": {
+    "event_id": {"type": "string"},
+    "tenant_id": {"type": "string"},
+    "bounded_context": {"type": "string"},
+    "aggregate_id": {"type": "string"},
+    "event_type": {"type": "string"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "payload": {"type": "object"}
+  },
+  "required": ["event_id", "tenant_id", "bounded_context", "aggregate_id", "event_type", "occurred_at", "payload"]
+}

@@ -1,0 +1,12 @@
+openapi: 3.1.0
+info:
+  title: Balloon Service API
+  version: 1.0.0
+servers:
+  - url: /balloon
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: OK

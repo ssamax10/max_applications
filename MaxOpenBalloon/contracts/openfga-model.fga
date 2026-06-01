@@ -1,0 +1,14 @@
+model
+  schema 1.1
+
+type tenant
+
+type user
+
+type drawing
+  relations
+    define tenant: [tenant]
+    define viewer: [user]
+    define editor: [user]
+    define can_view: viewer or editor
+    define can_edit: editor

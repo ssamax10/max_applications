@@ -1,0 +1,17 @@
+openapi: 3.1.0
+info:
+  title: MCP Service API
+  version: 1.0.0
+servers:
+  - url: /mcp
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: OK
+  /mcp/tools:
+    get:
+      responses:
+        '200':
+          description: Tool registry

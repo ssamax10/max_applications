@@ -1,0 +1,9 @@
+image:
+  repository: ghcr.io/ssamax10/maxopenballoon/drawing-service
+  tag: latest
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources: {}
