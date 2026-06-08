@@ -2097,6 +2097,258 @@
 			],
 			"isBackground": false,
 			"group": "build"
+		},
+		{
+			"label": "git-checkin-and-tag-v0.9",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location .; if (git tag --list v0.9) { Write-Error 'Tag v0.9 already exists'; exit 1 }; git commit -m 'Release v0.9: auth hardening, frontend QA export, and deployment updates'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git tag -a v0.9 -m 'version 0.9'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git show --no-patch --oneline HEAD; git tag --list v0.9"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "git-checkin-and-tag-v0.9-safe",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location .; if (git tag --list v0.9) { Write-Error \"Tag v0.9 already exists\"; exit 1 }; git commit -m v0.9_release; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git tag -a v0.9 -m version_0.9; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git show --no-patch --oneline HEAD; git tag --list v0.9"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "git-push-main-and-v0.9",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location .; git push origin main; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin v0.9"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "helm-template-dev-check",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/helm/maxopenballoon; helm template maxopenballoon-dev . -f values-dev.yaml | Select-String -Pattern '^kind: Deployment|^kind: Service|name: maxopenballoon-'"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "helm-template-dev-check-safe",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"cd /d deploy\\helm\\maxopenballoon && helm template maxopenballoon-dev . -f values-dev.yaml > ..\\..\\..\\.tmp\\helm-dev-render.yaml && findstr /R /C:\"^kind: Deployment\" /C:\"^kind: Service\" /C:\"^  name: maxopenballoon-\" ..\\..\\..\\.tmp\\helm-dev-render.yaml"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "release-v0.9.1",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location .; git status --short; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git add deploy/helm/maxopenballoon/templates/deployment.yaml deploy/helm/maxopenballoon/templates/service.yaml deploy/helm/maxopenballoon/values.yaml deploy/helm/maxopenballoon/values-dev.yaml deploy/helm/maxopenballoon/values-stage.yaml deploy/helm/maxopenballoon/values-prod.yaml; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git commit -m v0.9.1_helm_service_matrix; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; if (git tag --list v0.9.1) { Write-Error \"Tag v0.9.1 already exists\"; exit 1 }; git tag -a v0.9.1 -m version_0.9.1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin main; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin v0.9.1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git show --no-patch --oneline HEAD; git tag --list v0.9.1"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "post-release-status-v0.9.1",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"git status --short --branch"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "review-pending-diff",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"git status --short --branch && echo. && git diff -- .vscode/tasks.json apps/frontend/src/components/ViewerShell.tsx apps/frontend/src/layers/AnnotationLayer.tsx deploy/docker/.env.example services/dwg-translation-service/Dockerfile"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "diff-viewershell",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"git diff -- apps/frontend/src/components/ViewerShell.tsx"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "diff-annotation",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"git diff -- apps/frontend/src/layers/AnnotationLayer.tsx"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "diff-env-example",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"git diff -- deploy/docker/.env.example"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "diff-dwg-dockerfile",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"git diff -- services/dwg-translation-service/Dockerfile"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "diff-tasksjson",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"git diff -- .vscode/tasks.json"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "check-next-tag",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"git tag --list v0.9.*"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "release-v0.9.2-selected",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location .; git add apps/frontend/src/components/ViewerShell.tsx apps/frontend/src/layers/AnnotationLayer.tsx deploy/docker/.env.example services/dwg-translation-service/Dockerfile; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git commit -m v0.9.2_app_deploy_sync; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; if (git tag --list v0.9.2) { Write-Error \"Tag v0.9.2 already exists\"; exit 1 }; git tag -a v0.9.2 -m version_0.9.2; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin main; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin v0.9.2; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git show --no-patch --oneline HEAD; git tag --list v0.9.2; git status --short --branch"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "list-local-app-images",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"docker image ls --format \"{{.Repository}}:{{.Tag}}\" | findstr /R \"^docker-.*:latest\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "tag-and-push-app-images-v0.9.2",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"docker tag docker-frontend:latest ghcr.io/ssamax10/maxopenballoon/frontend:v0.9.2 && docker tag docker-drawing-service:latest ghcr.io/ssamax10/maxopenballoon/drawing-service:v0.9.2 && docker tag docker-geometry-service:latest ghcr.io/ssamax10/maxopenballoon/geometry-service:v0.9.2 && docker tag docker-balloon-service:latest ghcr.io/ssamax10/maxopenballoon/balloon-service:v0.9.2 && docker tag docker-ai-service:latest ghcr.io/ssamax10/maxopenballoon/ai-service:v0.9.2 && docker tag docker-pdf-worker-service:latest ghcr.io/ssamax10/maxopenballoon/pdf-worker-service:v0.9.2 && docker tag docker-mcp-service:latest ghcr.io/ssamax10/maxopenballoon/mcp-service:v0.9.2 && docker tag docker-revision-service:latest ghcr.io/ssamax10/maxopenballoon/revision-service:v0.9.2 && docker tag docker-dwg-translation-service:latest ghcr.io/ssamax10/maxopenballoon/dwg-translation-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/frontend:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/drawing-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/geometry-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/balloon-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/ai-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/pdf-worker-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/mcp-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/revision-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/dwg-translation-service:v0.9.2"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-local-ghcr-tags",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"docker image ls --format \"{{.Repository}}:{{.Tag}}\" | findstr /R \"^ghcr.io/ssamax10/maxopenballoon/.+:v0.9.2\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "list-local-ghcr-tags",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"docker image ls --format \"{{.Repository}}:{{.Tag}}\" | findstr \"ghcr.io/ssamax10/maxopenballoon/\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "push-ghcr-v0.9.2-all-services",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"docker push ghcr.io/ssamax10/maxopenballoon/frontend:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/drawing-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/geometry-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/balloon-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/ai-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/pdf-worker-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/mcp-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/revision-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/dwg-translation-service:v0.9.2"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-ghcr-v0.9.2-images",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"docker manifest inspect ghcr.io/ssamax10/maxopenballoon/frontend:v0.9.2 >NUL && echo frontend ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/drawing-service:v0.9.2 >NUL && echo drawing ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/geometry-service:v0.9.2 >NUL && echo geometry ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/balloon-service:v0.9.2 >NUL && echo balloon ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/ai-service:v0.9.2 >NUL && echo ai ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/pdf-worker-service:v0.9.2 >NUL && echo pdf-worker ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/mcp-service:v0.9.2 >NUL && echo mcp ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/revision-service:v0.9.2 >NUL && echo revision ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/dwg-translation-service:v0.9.2 >NUL && echo dwg ok"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "push-remaining-ghcr-v0.9.2",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"docker push ghcr.io/ssamax10/maxopenballoon/ai-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/pdf-worker-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/mcp-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/revision-service:v0.9.2 && docker push ghcr.io/ssamax10/maxopenballoon/dwg-translation-service:v0.9.2"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-all-ghcr-v0.9.2",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"docker manifest inspect ghcr.io/ssamax10/maxopenballoon/frontend:v0.9.2 >NUL && echo frontend ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/drawing-service:v0.9.2 >NUL && echo drawing ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/geometry-service:v0.9.2 >NUL && echo geometry ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/balloon-service:v0.9.2 >NUL && echo balloon ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/ai-service:v0.9.2 >NUL && echo ai ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/pdf-worker-service:v0.9.2 >NUL && echo pdf-worker ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/mcp-service:v0.9.2 >NUL && echo mcp ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/revision-service:v0.9.2 >NUL && echo revision ok && docker manifest inspect ghcr.io/ssamax10/maxopenballoon/dwg-translation-service:v0.9.2 >NUL && echo dwg ok"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "status-after-ghcr-link",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"git status --short --branch"
+			],
+			"isBackground": false
 		}
 	]
 }
