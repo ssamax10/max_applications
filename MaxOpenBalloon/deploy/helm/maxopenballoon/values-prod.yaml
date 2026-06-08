@@ -1,8 +1,6 @@
-replicaCount: 3
-
-image:
-  tag: prod
-  pullPolicy: IfNotPresent
+global:
+  imageTag: prod
+  imagePullPolicy: IfNotPresent
 
 auth:
   required: true
@@ -11,14 +9,38 @@ auth:
   oidcAudience: maxopenballoon
   tenantClaim: tenant_id
 
-service:
-  type: ClusterIP
-  port: 8000
-
-resources:
+defaultResources:
   requests:
     cpu: 500m
     memory: 512Mi
   limits:
     cpu: 2000m
     memory: 2048Mi
+
+services:
+  frontend:
+    replicas: 3
+  drawing-service:
+    replicas: 3
+  geometry-service:
+    replicas: 3
+  balloon-service:
+    replicas: 3
+  ai-service:
+    replicas: 3
+  mcp-service:
+    replicas: 3
+  revision-service:
+    replicas: 3
+  dwg-translation-service:
+    replicas: 3
+  pdf-worker-service:
+    replicas: 3
+  postgres:
+    replicas: 1
+  redis:
+    replicas: 1
+  minio:
+    replicas: 1
+  openfga:
+    replicas: 1

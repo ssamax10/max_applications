@@ -1,9 +1,6 @@
-replicaCount: 2
-
-image:
-  repository: ghcr.io/ssamax10/maxopenballoon/drawing-service
-  tag: latest
-  pullPolicy: IfNotPresent
+global:
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
 
 auth:
   required: true
@@ -12,14 +9,223 @@ auth:
   oidcAudience: ""
   tenantClaim: tenant_id
 
-service:
-  type: ClusterIP
-  port: 8000
-
-resources:
+defaultResources:
   requests:
     cpu: 250m
     memory: 256Mi
   limits:
     cpu: 1000m
     memory: 1024Mi
+
+services:
+  frontend:
+    enabled: true
+    replicas: 2
+    image:
+      repository: ghcr.io/ssamax10/maxopenballoon/frontend
+      tag: ""
+    containerPort: 5173
+    service:
+      type: ClusterIP
+      port: 5173
+    env:
+      VITE_DRAWING_API_BASE: http://maxopenballoon-drawing-service:8000
+      VITE_OIDC_ISSUER: https://auth.edge.example.com/application/o/maxopenballoon/
+      VITE_OIDC_CLIENT_ID: maxopenballoon-frontend
+      VITE_OIDC_SCOPE: openid profile email
+      VITE_OIDC_AUDIENCE: ""
+      VITE_TENANT_CLAIM: tenant_id
+
+  drawing-service:
+    enabled: true
+    replicas: 2
+    image:
+      repository: ghcr.io/ssamax10/maxopenballoon/drawing-service
+      tag: ""
+    containerPort: 8000
+    service:
+      type: ClusterIP
+      port: 8000
+    injectAuthEnv: true
+
+  geometry-service:
+    enabled: true
+    replicas: 2
+    image:
+      repository: ghcr.io/ssamax10/maxopenballoon/geometry-service
+      tag: ""
+    containerPort: 8000
+    service:
+      type: ClusterIP
+      port: 8000
+    injectAuthEnv: true
+
+  balloon-service:
+    enabled: true
+    replicas: 2
+    image:
+      repository: ghcr.io/ssamax10/maxopenballoon/balloon-service
+      tag: ""
+    containerPort: 8000
+    service:
+      type: ClusterIP
+      port: 8000
+    injectAuthEnv: true
+
+  ai-service:
+    enabled: true
+    replicas: 2
+    image:
+      repository: ghcr.io/ssamax10/maxopenballoon/ai-service
+      tag: ""
+    containerPort: 8000
+    service:
+      type: ClusterIP
+      port: 8000
+    injectAuthEnv: true
+    env:
+      DETECTOR_ORDER: pdf_worker,paddleocr_opencv,florence2,hybrid,heuristic
+      FLORENCE2_ENDPOINT: ""
+      FLORENCE2_TIMEOUT_SECONDS: "20"
+      PDF_WORKER_INTERNAL_URL: http://maxopenballoon-pdf-worker-service:8000
+      PDF_WORKER_TIMEOUT_SECONDS: "180"
+      DWG_TRANSLATION_INTERNAL_URL: http://maxopenballoon-dwg-translation-service:8000
+
+  mcp-service:
+    enabled: true
+    replicas: 2
+    image:
+      repository: ghcr.io/ssamax10/maxopenballoon/mcp-service
+      tag: ""
+    containerPort: 8000
+    service:
+      type: ClusterIP
+      port: 8000
+    injectAuthEnv: true
+
+  revision-service:
+    enabled: true
+    replicas: 2
+    image:
+      repository: ghcr.io/ssamax10/maxopenballoon/revision-service
+      tag: ""
+    containerPort: 8000
+    service:
+      type: ClusterIP
+      port: 8000
+    injectAuthEnv: true
+
+  dwg-translation-service:
+    enabled: true
+    replicas: 2
+    image:
+      repository: ghcr.io/ssamax10/maxopenballoon/dwg-translation-service
+      tag: ""
+    containerPort: 8000
+    service:
+      type: ClusterIP
+      port: 8000
+    injectAuthEnv: true
+    env:
+      PUBLIC_BASE_URL: http://maxopenballoon-dwg-translation-service:8000
+
+  pdf-worker-service:
+    enabled: true
+    replicas: 2
+    image:
+      repository: ghcr.io/ssamax10/maxopenballoon/pdf-worker-service
+      tag: ""
+    containerPort: 8000
+    service:
+      type: ClusterIP
+      port: 8000
+    env:
+      CORS_ALLOW_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+
+  postgres:
+    enabled: true
+    replicas: 1
+    image:
+      repository: postgres
+      tag: "16"
+    containerPort: 5432
+    service:
+      type: ClusterIP
+      port: 5432
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    env:
+      POSTGRES_DB: maxopenballoon
+      POSTGRES_USER: max
+      POSTGRES_PASSWORD: draw
+
+  redis:
+    enabled: true
+    replicas: 1
+    image:
+      repository: redis
+      tag: "7"
+    containerPort: 6379
+    service:
+      type: ClusterIP
+      port: 6379
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+  minio:
+    enabled: true
+    replicas: 1
+    image:
+      repository: minio/minio
+      tag: latest
+    containerPort: 9000
+    service:
+      type: ClusterIP
+      port: 9000
+    command:
+      - minio
+    args:
+      - server
+      - /data
+      - --console-address
+      - :9001
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    env:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+
+  openfga:
+    enabled: true
+    replicas: 1
+    image:
+      repository: openfga/openfga
+      tag: latest
+    containerPort: 8080
+    service:
+      type: ClusterIP
+      port: 8080
+    args:
+      - run
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi

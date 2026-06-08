@@ -1,11 +1,16 @@
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Chart.Name }}-drawing-service
+  name: {{ $.Chart.Name }}-{{ $name }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ default "ClusterIP" $svc.service.type }}
   selector:
-    app: {{ .Chart.Name }}-drawing-service
+    app: {{ $.Chart.Name }}-{{ $name }}
   ports:
-    - port: {{ .Values.service.port }}
-      targetPort: 8000
+    - port: {{ default 8000 $svc.service.port }}
+      targetPort: {{ default 8000 $svc.containerPort }}
+---
+{{- end }}
+{{- end }}
