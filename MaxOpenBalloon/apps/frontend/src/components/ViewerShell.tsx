@@ -1,6 +1,5 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
-import * as XLSX from "xlsx";
 
 import { AnnotationLayer } from "../layers/AnnotationLayer";
 import { BalloonOverlayLayer } from "../layers/BalloonOverlayLayer";
@@ -19,13 +18,7 @@ import {
   type SessionContext,
   type TranslationJob,
 } from "../services/serviceApi";
-import {
-  clearStoredOidcSession,
-  completeOidcLoginFromUrl,
-  getStoredOidcSession,
-  refreshOidcSession,
-  startOidcLogin,
-} from "../services/oidcAuth";
+import { completeOidcLoginFromUrl, startOidcLogin } from "../services/oidcAuth";
 import { useViewerState } from "../state/viewerState";
 
 const serviceSequence = [
@@ -52,7 +45,6 @@ type LastCanvasAction =
   };
 
 type DrawingFormat = "DWG" | "DXF" | "PDF" | "SVG";
-const BALLOON_TEXT_COLOR = "#111111";
 
 function inferSourceFormat(fileName: string): DrawingFormat {
   const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
@@ -101,11 +93,6 @@ function geometryTextColor(geometry: Record<string, unknown>, fallback = "#fff4d
   return typeof value === "string" && value ? value : fallback;
 }
 
-function geometryTextRotation(geometry: Record<string, unknown>, fallback = 0): number {
-  const value = geometry.text_rotation;
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
 function geometryFontFamily(geometry: Record<string, unknown>, fallback = "Space Grotesk"): string {
   const value = geometry.font_family;
   return typeof value === "string" && value ? value : fallback;
@@ -143,43 +130,6 @@ function applyBalloonMoveGeometry(
   };
 }
 
-function safeFileStem(fileName: string | null | undefined, fallback: string): string {
-  const stem = (fileName?.replace(/\.[^.]+$/, "") ?? fallback).trim();
-  return stem || fallback;
-}
-
-function buildQaWorkbookRows(
-  balloons: BalloonRecord[],
-  sourceUri: string,
-  sourceFormat: DrawingFormat,
-  detectorUsed: string | null,
-) {
-  return balloons.map((balloon, index) => {
-    const x = geometryNumber(balloon.geometry, "x", 0);
-    const y = geometryNumber(balloon.geometry, "y", 0);
-    const size = geometrySize(balloon.geometry);
-    const textRotationRaw = balloon.geometry.text_rotation;
-    const textRotation = typeof textRotationRaw === "number" && Number.isFinite(textRotationRaw) ? textRotationRaw : 0;
-
-    return {
-      "Balloon #": index + 1,
-      "Balloon Label": balloon.label,
-      "Detected Dimension Label": balloon.label,
-      "Source X": x,
-      "Source Y": y,
-      "Circle Center X": x,
-      "Circle Center Y": y,
-      "Size": size,
-      "Fill Color": geometryFillColor(balloon.geometry),
-      "Outline Color": geometryOutlineColor(balloon.geometry),
-      "Text Rotation": textRotation,
-      "Drawing Source": sourceUri,
-      "Source Format": sourceFormat,
-      "Detector Used": detectorUsed ?? "unknown",
-    };
-  });
-}
-
 export function ViewerShell() {
   const { activeFormat } = useViewerState();
   const [tenantId, setTenantId] = useState("tenant-ui-001");
@@ -204,9 +154,8 @@ export function ViewerShell() {
   const [editFillColor, setEditFillColor] = useState("#ffd7c2");
   const [editNoFill, setEditNoFill] = useState(true);
   const [editOutlineColor, setEditOutlineColor] = useState("#d7651f");
-  const [editTextColor, setEditTextColor] = useState(BALLOON_TEXT_COLOR);
+  const [editTextColor, setEditTextColor] = useState("#fff4d8");
   const [editFontFamily, setEditFontFamily] = useState("Space Grotesk");
-  const [editTextRotation, setEditTextRotation] = useState("0");
   const [viewerMode, setViewerMode] = useState<"libracad" | "annotation">("annotation");
   const [placeModeEnabled, setPlaceModeEnabled] = useState(false);
   const [snapToGridEnabled, setSnapToGridEnabled] = useState(true);
@@ -223,16 +172,13 @@ export function ViewerShell() {
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [exportPreviewOnly, setExportPreviewOnly] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
-  const [isAutoBallooning, setIsAutoBallooning] = useState(false);
-  const [showDebugAnchors, setShowDebugAnchors] = useState(false);
 
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<ServiceResult | null>(null);
   const [aiSuggestionCount, setAiSuggestionCount] = useState(0);
-  const [detectorMode, setDetectorMode] = useState<"paddleocr_opencv" | "heuristic" | "florence2" | "hybrid" | "pdf_worker">("pdf_worker");
+  const [detectorMode, setDetectorMode] = useState<"paddleocr_opencv" | "heuristic" | "florence2" | "hybrid">("paddleocr_opencv");
   const [lastDetectorUsed, setLastDetectorUsed] = useState<string | null>(null);
   const [lastAttemptedDetectors, setLastAttemptedDetectors] = useState<string[]>([]);
-  const [lastDetectorDiagnostics, setLastDetectorDiagnostics] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
 
@@ -253,20 +199,6 @@ export function ViewerShell() {
       }
     };
   }, [viewerAssetUrl]);
-
-  useEffect(() => {
-    const stored = getStoredOidcSession();
-    if (!stored) {
-      return;
-    }
-
-    const resolvedTenant = stored.tenantIdFromToken ?? tenantId;
-    setTenantId(resolvedTenant);
-    setSession({
-      tenantId: resolvedTenant,
-      accessToken: stored.accessToken,
-    });
-  }, []);
 
   useEffect(() => {
     async function completeAuth() {
@@ -290,7 +222,7 @@ export function ViewerShell() {
     }
 
     void completeAuth();
-  }, []);
+  }, [tenantId]);
 
   async function signIn() {
     const normalizedTenant = tenantId.trim();
@@ -312,7 +244,6 @@ export function ViewerShell() {
   }
 
   function signOut() {
-    clearStoredOidcSession();
     setSession(null);
     setDrawingId(null);
     setBalloons([]);
@@ -323,7 +254,6 @@ export function ViewerShell() {
     setAiSuggestionCount(0);
     setLastDetectorUsed(null);
     setLastAttemptedDetectors([]);
-    setLastDetectorDiagnostics({});
     setError(null);
     setAuthBusy(false);
     setLastCanvasAction(null);
@@ -402,44 +332,38 @@ export function ViewerShell() {
         setIsConvertingPreview(true);
         setLoadStatus("Converting DWG to PDF with QCAD...");
         let pdfStepError: string | null = null;
-        let svgStepError: string | null = null;
         try {
           const pdfJobResult = await convertDrawing(session, drawing.source_uri, "PDF");
           setPdfJob(pdfJobResult);
-          setSvgJob(null);
-          const blobUrl = await resolveRemotePreviewUrl(pdfJobResult.output_uri);
+        } catch (pdfPreviewError) {
+          pdfStepError = pdfPreviewError instanceof Error ? pdfPreviewError.message : "DWG PDF conversion failed";
+          setPdfJob(null);
+        }
+
+        setLoadStatus("Preparing DWG base preview as SVG...");
+        try {
+          const svgJobResult = await convertDrawing(session, drawing.source_uri, "SVG");
+          setSvgJob(svgJobResult);
+          const blobUrl = await resolveRemotePreviewUrl(svgJobResult.output_uri);
           setViewerAssetUrl((current) => {
             if (current && current.startsWith("blob:")) {
               URL.revokeObjectURL(current);
             }
             return blobUrl;
           });
-          setPreviewAssetFormat("PDF");
-          setLoadStatus("DWG preview ready with QCAD PDF base layer.");
-        } catch (pdfPreviewError) {
-          pdfStepError = pdfPreviewError instanceof Error ? pdfPreviewError.message : "DWG PDF conversion failed";
-          setPdfJob(null);
-          setLoadStatus("Preparing DWG base preview as SVG fallback...");
-          try {
-            const svgJobResult = await convertDrawing(session, drawing.source_uri, "SVG");
-            setSvgJob(svgJobResult);
-            const blobUrl = await resolveRemotePreviewUrl(svgJobResult.output_uri);
-            setViewerAssetUrl((current) => {
-              if (current && current.startsWith("blob:")) {
-                URL.revokeObjectURL(current);
-              }
-              return blobUrl;
-            });
-            setPreviewAssetFormat("SVG");
-            setLoadStatus("DWG preview ready using LibreDWG SVG fallback.");
-          } catch (svgPreviewError) {
-            svgStepError = svgPreviewError instanceof Error ? svgPreviewError.message : "DWG SVG preview failed";
-            const detail = pdfStepError ? `${pdfStepError}. SVG preview failed: ${svgStepError}` : svgStepError;
-            setPreviewLoadError(detail);
-            setViewerAssetUrl(null);
-            setPreviewAssetFormat(null);
-            setLoadStatus("Failed to prepare DWG preview.");
+          setPreviewAssetFormat("SVG");
+          if (pdfStepError) {
+            setLoadStatus("DWG preview ready using LibreDWG SVG. QCAD PDF step failed.");
+          } else {
+            setLoadStatus("DWG preview ready with LibreDWG SVG base layer.");
           }
+        } catch (svgPreviewError) {
+          const svgError = svgPreviewError instanceof Error ? svgPreviewError.message : "DWG SVG preview failed";
+          const detail = pdfStepError ? `${pdfStepError}. SVG preview failed: ${svgError}` : svgError;
+          setPreviewLoadError(detail);
+          setViewerAssetUrl(null);
+          setPreviewAssetFormat(null);
+          setLoadStatus("Failed to prepare DWG preview.");
         } finally {
           setIsConvertingPreview(false);
         }
@@ -493,22 +417,13 @@ export function ViewerShell() {
       return;
     }
 
-    if (isAutoBallooning) {
-      return;
-    }
-
-    setIsAutoBallooning(true);
     setError(null);
-    const effectiveDetectorMode = detectorMode;
-    setLoadStatus("Auto balloon: requesting AI suggestions...");
     try {
-      const response = await autoBalloon(session, drawingId, 60, effectiveDetectorMode);
-      setLoadStatus("Auto balloon: saving suggested balloons...");
+      const response = await autoBalloon(session, drawingId, 60, detectorMode);
       const created = response.balloons;
       setAiSuggestionCount(response.suggestions);
       setLastDetectorUsed(response.detectorUsed);
       setLastAttemptedDetectors(response.attemptedDetectors);
-      setLastDetectorDiagnostics(response.detectorDiagnostics);
       setBalloons((current) => {
         const existing = new Map(current.map((entry) => [entry.id, entry]));
         created.forEach((entry) => {
@@ -528,16 +443,11 @@ export function ViewerShell() {
         setEditFillColor(isTransparentFill(nextFill) ? "#ffd7c2" : nextFill);
         setEditNoFill(isTransparentFill(nextFill));
         setEditOutlineColor(geometryOutlineColor(first.geometry));
-        setEditTextColor(BALLOON_TEXT_COLOR);
+        setEditTextColor(geometryTextColor(first.geometry));
         setEditFontFamily(geometryFontFamily(first.geometry));
-        setEditTextRotation(String(geometryTextRotation(first.geometry)));
       }
-      setLoadStatus(`Auto balloon complete: ${response.suggestions} suggestions from ${response.detectorUsed}.`);
     } catch (balloonError) {
       setError(balloonError instanceof Error ? balloonError.message : "Failed to auto-balloon drawing");
-      setLoadStatus("Auto balloon failed.");
-    } finally {
-      setIsAutoBallooning(false);
     }
   }
 
@@ -552,16 +462,15 @@ export function ViewerShell() {
       const created = await createBalloon(
         session,
         drawingId,
-        editLabel || String(balloons.length + 1),
+        editLabel || `B-${String(balloons.length + 1).padStart(3, "0")}`,
         {
           x: Number(editX),
           y: Number(editY),
           size: Number(editSize),
           fill_color: editNoFill ? "transparent" : editFillColor,
           outline_color: editOutlineColor,
-          text_color: BALLOON_TEXT_COLOR,
+          text_color: editTextColor,
           font_family: editFontFamily,
-          text_rotation: Number(editTextRotation),
         },
       );
       setBalloons((current) => [...current, created]);
@@ -586,9 +495,8 @@ export function ViewerShell() {
     setEditFillColor(isTransparentFill(nextFill) ? "#ffd7c2" : nextFill);
     setEditNoFill(isTransparentFill(nextFill));
     setEditOutlineColor(geometryOutlineColor(next.geometry));
-    setEditTextColor(BALLOON_TEXT_COLOR);
+    setEditTextColor(geometryTextColor(next.geometry));
     setEditFontFamily(geometryFontFamily(next.geometry));
-    setEditTextRotation(String(geometryTextRotation(next.geometry)));
   }
 
   async function moveBalloonOnCanvas(balloonId: string, x: number, y: number) {
@@ -652,9 +560,8 @@ export function ViewerShell() {
           size: Number(editSize),
           fill_color: editNoFill ? "transparent" : editFillColor,
           outline_color: editOutlineColor,
-          text_color: BALLOON_TEXT_COLOR,
+          text_color: editTextColor,
           font_family: editFontFamily,
-          text_rotation: Number(editTextRotation),
         },
       });
       setBalloons((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
@@ -692,15 +599,12 @@ export function ViewerShell() {
       throw new Error("Not signed in");
     }
 
-    const stored = await refreshOidcSession();
-    const initialToken = stored?.accessToken ?? session.accessToken;
-
     const headers: Record<string, string> = {
       "X-Tenant-ID": session.tenantId,
     };
 
-    if (initialToken) {
-      headers.Authorization = `Bearer ${initialToken}`;
+    if (session.accessToken) {
+      headers.Authorization = `Bearer ${session.accessToken}`;
     }
 
     let response = await fetch(remoteUrl, {
@@ -708,30 +612,13 @@ export function ViewerShell() {
       headers,
     });
 
-    if (!response.ok && response.status === 401 && initialToken) {
+    if (!response.ok && response.status === 401 && session.accessToken) {
       const detail = await response.text();
-      if (/invalid bearer token|unable to validate bearer token|token/i.test(detail)) {
-        try {
-          const refreshed = await refreshOidcSession(true);
-          if (refreshed?.accessToken && refreshed.accessToken !== initialToken) {
-            response = await fetch(remoteUrl, {
-              method: "GET",
-              headers: {
-                "X-Tenant-ID": session.tenantId,
-                Authorization: `Bearer ${refreshed.accessToken}`,
-              },
-            });
-          }
-        } catch {
-          // continue with existing response handling
-        }
-
-        if (!response.ok && /invalid bearer token/i.test(detail)) {
-          response = await fetch(remoteUrl, {
-            method: "GET",
-            headers: { "X-Tenant-ID": session.tenantId },
-          });
-        }
+      if (/invalid bearer token/i.test(detail)) {
+        response = await fetch(remoteUrl, {
+          method: "GET",
+          headers: { "X-Tenant-ID": session.tenantId },
+        });
       }
     }
 
@@ -808,16 +695,15 @@ export function ViewerShell() {
       const created = await createBalloon(
         session,
         drawingId,
-        editLabel || String(balloons.length + 1),
+        editLabel || `B-${String(balloons.length + 1).padStart(3, "0")}`,
         {
           x: nextX,
           y: nextY,
           size: Number(editSize),
           fill_color: editNoFill ? "transparent" : editFillColor,
           outline_color: editOutlineColor,
-          text_color: BALLOON_TEXT_COLOR,
+          text_color: editTextColor,
           font_family: editFontFamily,
-          text_rotation: Number(editTextRotation),
         },
       );
       setBalloons((current) => [...current, created]);
@@ -854,9 +740,8 @@ export function ViewerShell() {
           setEditFillColor(isTransparentFill(nextFill) ? "#ffd7c2" : nextFill);
           setEditNoFill(isTransparentFill(nextFill));
           setEditOutlineColor(geometryOutlineColor(updated.geometry));
-          setEditTextColor(BALLOON_TEXT_COLOR);
+          setEditTextColor(geometryTextColor(updated.geometry));
           setEditFontFamily(geometryFontFamily(updated.geometry));
-          setEditTextRotation(String(geometryTextRotation(updated.geometry)));
         }
         setLastCanvasAction(null);
       } catch (undoError) {
@@ -900,9 +785,8 @@ export function ViewerShell() {
           setEditFillColor(isTransparentFill(nextFill) ? "#ffd7c2" : nextFill);
           setEditNoFill(isTransparentFill(nextFill));
           setEditOutlineColor(geometryOutlineColor(nextSelected.geometry));
-          setEditTextColor(BALLOON_TEXT_COLOR);
+          setEditTextColor(geometryTextColor(nextSelected.geometry));
           setEditFontFamily(geometryFontFamily(nextSelected.geometry));
-          setEditTextRotation(String(geometryTextRotation(nextSelected.geometry)));
         }
         return next;
       });
@@ -923,11 +807,8 @@ export function ViewerShell() {
       fillColor: geometryFillColor(item.geometry),
       outlineColor: geometryOutlineColor(item.geometry),
       size: geometrySize(item.geometry),
-      textColor: BALLOON_TEXT_COLOR,
+      textColor: geometryTextColor(item.geometry),
       fontFamily: geometryFontFamily(item.geometry),
-      textRotation: geometryTextRotation(item.geometry),
-      debugSourceX: geometryNumber(item.geometry, "x", fallbackX),
-      debugSourceY: geometryNumber(item.geometry, "y", fallbackY),
     };
   });
 
@@ -1107,53 +988,6 @@ export function ViewerShell() {
     }
   }
 
-  async function exportQaExcel() {
-    if (!balloons.length) {
-      setError("Create or load balloons before exporting QA Excel.");
-      return;
-    }
-
-    setExportStatus("Preparing QA Excel export...");
-    try {
-      const balloonRows = buildQaWorkbookRows(balloons, sourceUri, sourceFormat, lastDetectorUsed);
-      const summaryRows = [
-        {
-          "Drawing ID": drawingId ?? "",
-          "Source URI": sourceUri,
-          "Source Format": sourceFormat,
-          "Detector Used": lastDetectorUsed ?? "",
-          "AI Suggestions": aiSuggestionCount,
-          "Balloon Count": balloons.length,
-          "Generated At": new Date().toISOString(),
-        },
-      ];
-
-      const workbook = XLSX.utils.book_new();
-      const balloonSheet = XLSX.utils.json_to_sheet(balloonRows);
-      const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
-
-      XLSX.utils.book_append_sheet(workbook, balloonSheet, "Balloons");
-      XLSX.utils.book_append_sheet(workbook, summarySheet, "QA Summary");
-
-      const workbookArray = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-      const blob = new Blob([workbookArray], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const blobUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = blobUrl;
-      anchor.download = `${safeFileStem(selectedFile?.name, "balloons")}-qa.xlsx`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(blobUrl);
-      setExportStatus("QA Excel exported.");
-    } catch (excelError) {
-      setError(excelError instanceof Error ? excelError.message : "QA Excel export failed");
-      setExportStatus(null);
-    }
-  }
-
   const serviceDetails: Array<{ name: ServiceLabel; value: string | number | null }> = [
     { name: "Drawing", value: result?.drawingId ?? null },
     { name: "Balloon", value: result?.balloonId ?? null },
@@ -1261,8 +1095,8 @@ export function ViewerShell() {
             {isLoadingDrawing ? "Loading Drawing..." : "Load 2D Drawing"}
           </button>
 
-          <button type="button" onClick={runAutoBalloon} disabled={!drawingId || !session || isAutoBallooning}>
-            {isAutoBallooning ? "Auto Ballooning..." : "Auto Balloon"}
+          <button type="button" onClick={runAutoBalloon} disabled={!drawingId || !session}>
+            Auto Balloon
           </button>
 
           <div className="field-row">
@@ -1270,9 +1104,8 @@ export function ViewerShell() {
             <select
               id="detector-mode"
               value={detectorMode}
-              onChange={(event) => setDetectorMode(event.target.value as "paddleocr_opencv" | "heuristic" | "florence2" | "hybrid" | "pdf_worker")}
+              onChange={(event) => setDetectorMode(event.target.value as "paddleocr_opencv" | "heuristic" | "florence2" | "hybrid")}
             >
-              <option value="pdf_worker">5 - PyMuPDF Worker (Phase Pipeline)</option>
               <option value="florence2">3 - Florence-2</option>
               <option value="paddleocr_opencv">2 - PaddleOCR + OpenCV</option>
               <option value="heuristic">1 - Heuristic</option>
@@ -1288,23 +1121,6 @@ export function ViewerShell() {
             <span>Attempted</span>
             <strong>{lastAttemptedDetectors.length > 0 ? lastAttemptedDetectors.join(", ") : "Not run yet"}</strong>
           </div>
-          <div className="meta-row">
-            <span>Diagnostics</span>
-            <strong>
-              {Object.keys(lastDetectorDiagnostics).length > 0
-                ? Object.entries(lastDetectorDiagnostics).map(([detector, reason]) => `${detector}: ${reason}`).join(" | ")
-                : "Not run yet"}
-            </strong>
-          </div>
-
-          <label className="place-mode-toggle">
-            <input
-              type="checkbox"
-              checked={showDebugAnchors}
-              onChange={(event) => setShowDebugAnchors(event.target.checked)}
-            />
-            Show source anchor coordinates
-          </label>
 
           <button type="button" onClick={convertToSvg} disabled={!session || !drawingId || !sourceUri.startsWith("minio://")}>
             Refresh SVG Preview (Fallback)
@@ -1312,10 +1128,6 @@ export function ViewerShell() {
 
           <button type="button" onClick={() => void exportPdf()} disabled={!session || isExportingPdf}>
             {isExportingPdf ? "Exporting PDF..." : "Export as New PDF"}
-          </button>
-
-          <button type="button" className="secondary" onClick={() => void exportQaExcel()} disabled={!session || balloons.length === 0}>
-            Export QA Excel
           </button>
 
           <button
@@ -1375,7 +1187,7 @@ export function ViewerShell() {
               id="balloon-label"
               value={editLabel}
               onChange={(event) => setEditLabel(event.target.value)}
-              placeholder="1"
+              placeholder="B-001"
             />
           </div>
           <div className="inline-fields">
@@ -1440,18 +1252,6 @@ export function ViewerShell() {
                 type="color"
                 value={editTextColor}
                 onChange={(event) => setEditTextColor(event.target.value)}
-                disabled
-              />
-            </div>
-            <div className="field-row">
-              <label htmlFor="balloon-text-rotation">Text Rotation</label>
-              <input
-                id="balloon-text-rotation"
-                type="number"
-                min={-180}
-                max={180}
-                value={editTextRotation}
-                onChange={(event) => setEditTextRotation(event.target.value)}
               />
             </div>
             <div className="field-row">
@@ -1578,7 +1378,6 @@ export function ViewerShell() {
                 drawingLayerLabel={drawingLayerLabel}
                 stageRef={stageRef}
                 exportPreviewOnly={exportPreviewOnly}
-                showDebugAnchors={showDebugAnchors}
                 onSelectBalloon={(balloonId) => {
                   selectBalloon(balloonId);
                 }}
@@ -1587,9 +1386,6 @@ export function ViewerShell() {
                 }}
                 onCanvasClick={(point) => {
                   void placeBalloonFromCanvas(point.x, point.y);
-                }}
-                onDeselectBalloon={() => {
-                  setSelectedBalloonId(null);
                 }}
               />
             </>

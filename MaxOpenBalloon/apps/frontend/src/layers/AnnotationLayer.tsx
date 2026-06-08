@@ -7,54 +7,10 @@ import { Circle, Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text } fr
 
 GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
-const PDF_RENDER_SCALE = 2;
-
 type LayerDimensions = {
   width: number;
   height: number;
 };
-
-function normalizeQuarterTurns(rotation: number): 0 | 1 | 2 | 3 {
-  const normalized = ((rotation % 360) + 360) % 360;
-  if (normalized === 90) {
-    return 1;
-  }
-  if (normalized === 180) {
-    return 2;
-  }
-  if (normalized === 270) {
-    return 3;
-  }
-  return 0;
-}
-
-function rotatePoint(point: { x: number; y: number }, dimensions: LayerDimensions, rotation: number): { x: number; y: number } {
-  const turns = normalizeQuarterTurns(rotation);
-  if (turns === 1) {
-    return { x: dimensions.height - point.y, y: point.x };
-  }
-  if (turns === 2) {
-    return { x: dimensions.width - point.x, y: dimensions.height - point.y };
-  }
-  if (turns === 3) {
-    return { x: point.y, y: dimensions.width - point.x };
-  }
-  return point;
-}
-
-function unrotatePoint(point: { x: number; y: number }, dimensions: LayerDimensions, rotation: number): { x: number; y: number } {
-  const turns = normalizeQuarterTurns(rotation);
-  if (turns === 1) {
-    return { x: point.y, y: dimensions.height - point.x };
-  }
-  if (turns === 2) {
-    return { x: dimensions.width - point.x, y: dimensions.height - point.y };
-  }
-  if (turns === 3) {
-    return { x: dimensions.width - point.y, y: point.x };
-  }
-  return point;
-}
 
 function parseSvgDimensions(svgText: string): LayerDimensions | null {
   const normalized = svgText.trim();
@@ -103,13 +59,9 @@ type AnnotationLayerProps = {
     size: number;
     textColor: string;
     fontFamily: string;
-    textRotation: number;
-    debugSourceX?: number;
-    debugSourceY?: number;
   }>;
   selectedBalloonId: string | null;
   onCanvasClick?: (point: { x: number; y: number }) => void;
-  onDeselectBalloon?: () => void;
   onSelectBalloon?: (balloonId: string) => void;
   onMoveBalloon?: (payload: { id: string; x: number; y: number }) => void;
   drawingLayerUrl?: string | null;
@@ -117,7 +69,6 @@ type AnnotationLayerProps = {
   drawingLayerLabel?: string;
   stageRef?: RefObject<any>;
   exportPreviewOnly?: boolean;
-  showDebugAnchors?: boolean;
 };
 
 export function AnnotationLayer({
@@ -125,7 +76,6 @@ export function AnnotationLayer({
   balloons,
   selectedBalloonId,
   onCanvasClick,
-  onDeselectBalloon,
   onSelectBalloon,
   onMoveBalloon,
   drawingLayerUrl,
@@ -133,7 +83,6 @@ export function AnnotationLayer({
   drawingLayerLabel,
   stageRef,
   exportPreviewOnly = false,
-  showDebugAnchors = false,
 }: AnnotationLayerProps) {
   const safeCount = Math.max(1, Math.min(featureCount || 3, 8));
   const markers = Array.from({ length: safeCount }, (_, index) => ({
@@ -149,8 +98,6 @@ export function AnnotationLayer({
   const gridStepY = 70;
   const [drawingLayerImage, setDrawingLayerImage] = useState<HTMLImageElement | null>(null);
   const [drawingLayerDimensions, setDrawingLayerDimensions] = useState<LayerDimensions | null>(null);
-  const [pdfBaseDimensions, setPdfBaseDimensions] = useState<LayerDimensions | null>(null);
-  const [pdfRotation, setPdfRotation] = useState(0);
   const [zoomScale, setZoomScale] = useState(1);
   const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 });
   const minZoom = 0.2;
@@ -176,7 +123,6 @@ export function AnnotationLayer({
     if (!layerUrl) {
       setDrawingLayerImage(null);
       setDrawingLayerDimensions(null);
-      setPdfBaseDimensions(null);
       return;
     }
 
@@ -189,14 +135,7 @@ export function AnnotationLayer({
           const loadingTask = getDocument(layerUrl);
           const pdfDocument = await loadingTask.promise;
           const page = await pdfDocument.getPage(1);
-          const baseRotation = ((page.rotate ?? 0) + 360) % 360;
-          const baseViewport = page.getViewport({ scale: PDF_RENDER_SCALE, rotation: baseRotation });
-          const baseUnitViewport = page.getViewport({ scale: 1, rotation: baseRotation });
-          const viewport = page.getViewport({ scale: PDF_RENDER_SCALE, rotation: ((baseRotation + pdfRotation) % 360 + 360) % 360 });
-
-          if (!cancelled) {
-            setPdfBaseDimensions({ width: baseUnitViewport.width, height: baseUnitViewport.height });
-          }
+          const viewport = page.getViewport({ scale: 1.5 });
 
           const canvas = document.createElement("canvas");
           canvas.width = Math.ceil(viewport.width);
@@ -227,16 +166,12 @@ export function AnnotationLayer({
           if (!cancelled) {
             setDrawingLayerImage(null);
             setDrawingLayerDimensions(null);
-            setPdfBaseDimensions(null);
           }
           return;
         }
       }
 
       if (drawingLayerFormat === "SVG") {
-        if (!cancelled) {
-          setPdfBaseDimensions(null);
-        }
         try {
           const svgResponse = await fetch(layerUrl);
           const svgText = await svgResponse.text();
@@ -251,7 +186,6 @@ export function AnnotationLayer({
         }
       } else if (!cancelled) {
         setDrawingLayerDimensions(null);
-        setPdfBaseDimensions(null);
       }
 
       const image = new window.Image();
@@ -283,7 +217,7 @@ export function AnnotationLayer({
     return () => {
       cancelled = true;
     };
-  }, [drawingLayerFormat, drawingLayerUrl, pdfRotation]);
+  }, [drawingLayerFormat, drawingLayerUrl]);
 
   const hasDrawingLayer = Boolean(drawingLayerImage);
   const drawingSource = drawingLayerImage;
@@ -298,62 +232,27 @@ export function AnnotationLayer({
   const drawingRenderHeight = drawingSource ? drawingSourceHeight * drawingScale : 0;
   const drawingOffsetX = hasDrawingLayer ? (canvasWidth - drawingRenderWidth) / 2 : 0;
   const drawingOffsetY = hasDrawingLayer ? (canvasHeight - drawingRenderHeight) / 2 : 0;
-  const sourceDimensions = drawingLayerFormat === "PDF"
-    ? pdfBaseDimensions ?? drawingLayerDimensions
-    : drawingLayerDimensions;
-  const sourceCoordinateWidth = sourceDimensions?.width ?? drawingSourceWidth;
-  const sourceCoordinateHeight = sourceDimensions?.height ?? drawingSourceHeight;
-  const sourceCoordinateScale = drawingSource && sourceCoordinateWidth > 0 && sourceCoordinateHeight > 0
-    ? Math.min(canvasWidth / sourceCoordinateWidth, canvasHeight / sourceCoordinateHeight)
-    : drawingScale;
-  const sourceOffsetX = hasDrawingLayer ? (canvasWidth - sourceCoordinateWidth * sourceCoordinateScale) / 2 : drawingOffsetX;
-  const sourceOffsetY = hasDrawingLayer ? (canvasHeight - sourceCoordinateHeight * sourceCoordinateScale) / 2 : drawingOffsetY;
-  const sourceRotation = drawingLayerFormat === "PDF" ? pdfRotation : 0;
-
-  function clampStagePosition(position: { x: number; y: number }, scale = zoomScale): { x: number; y: number } {
-    if (scale <= 1) {
-      return { x: 0, y: 0 };
-    }
-
-    const scaledWidth = canvasWidth * scale;
-    const scaledHeight = canvasHeight * scale;
-    const minX = canvasWidth - scaledWidth;
-    const minY = canvasHeight - scaledHeight;
-
-    return {
-      x: Math.max(minX, Math.min(0, position.x)),
-      y: Math.max(minY, Math.min(0, position.y)),
-    };
-  }
 
   function toCanvasPoint(point: { x: number; y: number }) {
     if (!drawingSource) {
       return point;
     }
 
-    const transformedPoint = sourceDimensions
-      ? rotatePoint(point, sourceDimensions, sourceRotation)
-      : point;
-
     return {
-      x: sourceOffsetX + transformedPoint.x * sourceCoordinateScale,
-      y: sourceOffsetY + transformedPoint.y * sourceCoordinateScale,
+      x: drawingOffsetX + point.x * drawingScale,
+      y: drawingOffsetY + point.y * drawingScale,
     };
   }
 
   function toSourcePoint(point: { x: number; y: number }) {
-    if (!drawingSource || sourceCoordinateScale <= 0) {
+    if (!drawingSource || drawingScale <= 0) {
       return point;
     }
 
-    const displayPoint = {
-      x: (point.x - sourceOffsetX) / sourceCoordinateScale,
-      y: (point.y - sourceOffsetY) / sourceCoordinateScale,
+    return {
+      x: (point.x - drawingOffsetX) / drawingScale,
+      y: (point.y - drawingOffsetY) / drawingScale,
     };
-
-    return sourceDimensions
-      ? unrotatePoint(displayPoint, sourceDimensions, sourceRotation)
-      : displayPoint;
   }
 
   function handleCanvasClick(x: number, y: number) {
@@ -362,13 +261,11 @@ export function AnnotationLayer({
     }
 
     const sourcePoint = toSourcePoint({ x, y });
-    const sourceMaxX = sourceDimensions?.width ?? drawingSource.width;
-    const sourceMaxY = sourceDimensions?.height ?? drawingSource.height;
     const clampedX = drawingSource
-      ? Math.max(0, Math.min(sourceMaxX, sourcePoint.x))
+      ? Math.max(0, Math.min(drawingSource.width, sourcePoint.x))
       : Math.max(16, Math.min(canvasWidth - 16, sourcePoint.x));
     const clampedY = drawingSource
-      ? Math.max(0, Math.min(sourceMaxY, sourcePoint.y))
+      ? Math.max(0, Math.min(drawingSource.height, sourcePoint.y))
       : Math.max(16, Math.min(canvasHeight - 16, sourcePoint.y));
     onCanvasClick({ x: clampedX, y: clampedY });
   }
@@ -380,13 +277,11 @@ export function AnnotationLayer({
       y: (anchor.y - stagePosition.y) / zoomScale,
     };
 
-    const nextPosition = clampStagePosition({
+    setZoomScale(clampedScale);
+    setStagePosition({
       x: anchor.x - worldPoint.x * clampedScale,
       y: anchor.y - worldPoint.y * clampedScale,
-    }, clampedScale);
-
-    setZoomScale(clampedScale);
-    setStagePosition(nextPosition);
+    });
   }
 
   function zoomFromCenter(multiplier: number) {
@@ -396,13 +291,6 @@ export function AnnotationLayer({
   function resetViewport() {
     setZoomScale(1);
     setStagePosition({ x: 0, y: 0 });
-  }
-
-  function rotateViewport(deltaDegrees: number) {
-    setPdfRotation((current) => {
-      const nextRotation = ((current + deltaDegrees) % 360 + 360) % 360;
-      return nextRotation;
-    });
   }
 
   function fitToDrawing() {
@@ -417,28 +305,21 @@ export function AnnotationLayer({
         <button type="button" onClick={() => zoomFromCenter(1.15)}>Zoom In</button>
         <button type="button" className="secondary" onClick={fitToDrawing}>Fit Drawing</button>
         <button type="button" className="secondary" onClick={resetViewport}>Reset View</button>
-        {drawingLayerFormat === "PDF" ? (
-          <>
-            <button type="button" className="secondary" onClick={() => rotateViewport(-90)}>Rotate Left</button>
-            <button type="button" className="secondary" onClick={() => rotateViewport(90)}>Rotate Right</button>
-            <button type="button" className="secondary" onClick={() => setPdfRotation(0)}>Reset Rotation</button>
-          </>
-        ) : null}
         <span style={{ color: "#8c6b47", fontSize: 13 }}>Zoom: {Math.round(zoomScale * 100)}%</span>
-        {drawingLayerFormat === "PDF" ? (
-          <span style={{ color: "#8c6b47", fontSize: 13 }}>Rotation: {pdfRotation}°</span>
-        ) : null}
       </div>
 
       <Stage
         width={canvasWidth}
         height={canvasHeight}
         ref={stageRef}
-        draggable={false}
+        draggable
         x={stagePosition.x}
         y={stagePosition.y}
         scaleX={zoomScale}
         scaleY={zoomScale}
+        onDragEnd={(event) => {
+          setStagePosition({ x: event.target.x(), y: event.target.y() });
+        }}
         onWheel={(event) => {
           event.evt.preventDefault();
           const stage = event.target.getStage();
@@ -460,7 +341,6 @@ export function AnnotationLayer({
             height={canvasHeight}
             fill={exportPreviewOnly ? "rgba(0,0,0,0)" : "#fff9ee"}
             onMouseDown={(event) => {
-              onDeselectBalloon?.();
               const stage = event.target.getStage();
               const pointer = stage?.getPointerPosition();
               if (!stage || !pointer) {
@@ -518,8 +398,6 @@ export function AnnotationLayer({
           {balloons.flatMap((balloon) => {
             const selected = balloon.id === selectedBalloonId;
             const canvasPoint = toCanvasPoint({ x: balloon.x, y: balloon.y });
-            const radius = Math.max(8, balloon.size / 2);
-            const textSize = Math.max(12, Math.round(radius * 0.95));
             return [
               <Group
                 name="balloon-layer"
@@ -538,36 +416,21 @@ export function AnnotationLayer({
                 }}
               >
                 <Circle
-                  x={0}
-                  y={0}
-                  radius={radius}
+                  radius={Math.max(8, balloon.size / 2)}
                   fill={balloon.fillColor}
                   stroke={selected ? "#ffffff" : balloon.outlineColor}
                   strokeWidth={3}
                   opacity={0.95}
                 />
                 <Text
-                  x={-radius}
-                  y={-textSize / 2}
-                  width={radius * 2}
-                  align="center"
+                  x={Math.max(18, balloon.size / 2 + 6)}
+                  y={-9}
                   text={balloon.label}
-                  fill="#111111"
-                  fontSize={textSize}
+                  fill={balloon.textColor}
+                  fontSize={Math.max(12, Math.round(balloon.size / 2.2))}
                   fontStyle="bold"
                   fontFamily={balloon.fontFamily}
-                  rotation={balloon.textRotation}
                 />
-                {showDebugAnchors ? (
-                  <Text
-                    x={radius + 8}
-                    y={-8}
-                    text={`src ${Math.round(balloon.debugSourceX ?? balloon.x)}, ${Math.round(balloon.debugSourceY ?? balloon.y)}`}
-                    fill="#0f172a"
-                    fontSize={11}
-                    fontFamily="IBM Plex Sans"
-                  />
-                ) : null}
               </Group>,
             ];
           })}
