@@ -1,0 +1,24 @@
+replicaCount: 1
+
+image:
+  tag: dev
+  pullPolicy: IfNotPresent
+
+auth:
+  required: true
+  oidcIssuer: https://auth.edge.example.com/application/o/maxopenballoon/
+  oidcJwksUrl: ""
+  oidcAudience: maxopenballoon-dev
+  tenantClaim: tenant_id
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources:
+  requests:
+    cpu: 150m
+    memory: 192Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

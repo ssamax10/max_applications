@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: maxopenballoon-stage
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ssamax10/max_draw_editor.git
+    targetRevision: HEAD
+    path: MaxOpenBalloon/deploy/helm/maxopenballoon
+    helm:
+      valueFiles:
+        - values-stage.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: maxopenballoon-stage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,9 +1,25 @@
+replicaCount: 2
+
 image:
   repository: ghcr.io/ssamax10/maxopenballoon/drawing-service
   tag: latest
+  pullPolicy: IfNotPresent
+
+auth:
+  required: true
+  oidcIssuer: https://auth.edge.example.com/application/o/maxopenballoon/
+  oidcJwksUrl: ""
+  oidcAudience: ""
+  tenantClaim: tenant_id
 
 service:
   type: ClusterIP
   port: 8000
 
-resources: {}
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1024Mi

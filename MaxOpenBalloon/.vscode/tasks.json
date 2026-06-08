@@ -1,0 +1,2102 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "rebuild-ai-and-verify-deps",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d ai-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service python -c \"import paddle, paddleocr, cv2, pypdfium2, numpy as np; print('deps-ok', paddle.__version__)\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "rebuild-ai-service",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d ai-service frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-ai-runtime-deps",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service sh -lc \"python -c \\\"import paddle, paddleocr, cv2, pypdfium2, numpy as np; print('deps-ok', paddle.__version__)\\\"\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-ai-runtime-deps-v2",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service python -c \"import paddle, paddleocr, cv2, pypdfium2, numpy as np; print(paddle.__version__)\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-ai-runtime-deps-v3",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service python -c 'import paddle, paddleocr, cv2, pypdfium2, numpy as np; print(paddle.__version__)'"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-ai-runtime-packages",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service pip show paddlepaddle paddleocr opencv-python-headless pypdfium2 numpy"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "check-paddlepaddle-installed",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service pip show paddlepaddle"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "build-frontend-after-detector-ui",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend sh -lc \"npm run build\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "build-frontend-direct",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "check-services-up",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "rebuild-and-restart-detectors",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d ai-service frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-logs",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=120 dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-ps",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps frontend dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "rebuild-dwg-service",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build dwg-translation-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d dwg-translation-service frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "check-dwg-image-deps",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -c \"import cairosvg; print('cairosvg-ok')\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "check-dwg-status",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "check-dwg-cairosvg",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "rebuild-dwg-nocache",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache dwg-translation-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "check-dwg-cairosvg-after",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "check-dwg-log-after",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=50 dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "restart-dwg-service",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ps-dwg-service",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker ps -a --filter name=dwg-translation-service --format \"table {{.Names}}\\t{{.Status}}\\t{{.Image}}\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ps-docker-core",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"docker version"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "compose-up-all",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "compose-ps-all",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logs-dwg-tail",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=120 dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "pip-show-cairosvg",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "rebuild-dwg-with-cairosvg",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache dwg-translation-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d dwg-translation-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "compose-ps-dwg-only",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "pip-show-cairosvg-after-rebuild",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-rebuild-fresh",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-up-force-recreate",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-ps-created",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker ps --filter name=docker-dwg-translation-service-1 --format \"table {{.Names}}`t{{.CreatedAt}}`t{{.Status}}\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-pip-cairosvg-check",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-import-cairosvg-test",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -c \"import cairosvg; print(cairosvg.__version__)\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-pip-list-cairo",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip list | findstr /I cairo"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-compose-images",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml images dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-pip-show-cairosvg-case",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show CairoSVG"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-cat-req-in-container",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service sh -c \"cat /app/requirements.txt\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-ls-app",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service ls -la /app"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-print-req",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service sh -c \"sed -n '1,40p' /app/requirements.txt\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-cat-req-simple",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service cat /app/requirements.txt"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "host-cat-dwg-req",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location c:/work/git/max_applications/MaxOpenBalloon; Get-Content services/dwg-translation-service/requirements.txt"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-rebuild-after-dockerfile-check",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache dwg-translation-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate dwg-translation-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-rebuild-disable-docs",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache dwg-translation-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate dwg-translation-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-image-age-post-rebuild",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml images dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-cairosvg-post-rebuild",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-logs-post-rebuild",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=40 dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-build-with-logfile",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; New-Item -ItemType Directory -Force -Path ../../.tmp | Out-Null; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache dwg-translation-service *>&1 | Tee-Object -FilePath ../../.tmp/dwg-build.log; exit $LASTEXITCODE"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "tail-dwg-build-log",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location c:/work/git/max_applications/MaxOpenBalloon; Get-Content .tmp/dwg-build.log -Tail 160"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-verify-pdf-download",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-export-feedback",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-zoom-adaptive",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ai-compile-routes",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service python -m py_compile app/api/routes.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-libracad-flow",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ai-compile-libracad-plan",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service python -m py_compile app/api/routes.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "compose-ps-frontend",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-logs-tail",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=120 frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-container-grep-new-ui",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend sh -c \"grep -n 'CAD + Balloon Workspace' /app/src/components/ViewerShell.tsx; grep -n 'LibreCAD-style Base Viewer' /app/src/components/ViewerShell.tsx\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-force-recreate",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-floating-tools",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-recreate-after-ui-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-overlay-bearer-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-recreate-overlay-bearer-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-logs-pdf-500",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=180 dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-pip-show-cairosvg-current",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "inspect-failing-job-detail",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"$id='fcb28f19-492e-4823-bb0f-fd305929c0fa'; Invoke-RestMethod -Method GET -Uri ('http://localhost:18007/translate/dwg/' + $id) -Headers @{ 'X-Tenant-ID'='tenant-ui-001' } | ConvertTo-Json -Depth 5"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "inspect-failing-output-detail",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"$id='fcb28f19-492e-4823-bb0f-fd305929c0fa'; try { Invoke-WebRequest -Method GET -Uri ('http://localhost:18007/translate/dwg/' + $id + '/output') -Headers @{ 'X-Tenant-ID'='tenant-ui-001' } -ErrorAction Stop | Out-Null; 'OK' } catch { $_.Exception.Response.GetResponseStream() | % { $r = New-Object System.IO.StreamReader($_); $r.ReadToEnd(); $r.Close() } }"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-synced-zoom-delete",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-compile-conversion-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec dwg-translation-service python -m py_compile app/api/routes.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "restart-frontend-after-sync-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "restart-dwg-after-export-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-health-after-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Invoke-RestMethod -Method GET -Uri http://localhost:18007/health | ConvertTo-Json -Depth 3"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-merged-export",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ai-compile-detector-refine",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service python -m py_compile app/api/routes.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-recreate-after-merge-export",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ai-recreate-after-detector-refine",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate ai-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-export-layers-only",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-recreate-export-layers-only",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-export-preview-toggle",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-recreate-export-preview-toggle",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-auth-preview-fetch",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec frontend npm run build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-recreate-auth-preview-fetch",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ai-build-with-cairosvg",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build ai-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ai-recreate-after-all-format-support",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate ai-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ai-pip-show-cairosvg",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service python -m pip show cairosvg"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "ai-health-check",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Invoke-RestMethod -Method GET -Uri http://localhost:18004/health | ConvertTo-Json -Depth 3"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-cairosvg-in-ai-container",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service python -m pip show CairoSVG"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "inspect-ai-routes-in-container",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec ai-service python -c \"from app.api.routes import BalloonGeometry; import inspect; print(BalloonGeometry.model_fields['fill_color']); print(inspect.getsource(BalloonGeometry))\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "show-diff-ai-format-support",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"git diff -- services/ai-service/app/api/routes.py services/ai-service/app/core/settings.py services/ai-service/requirements.txt deploy/docker/docker-compose.yml"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-build-check",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-docker-build",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "frontend-recreate-after-dwg-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "dwg-service-recreate-after-check",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate dwg-translation-service"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "rebuild-deploy-frontend-dwg-status",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "rebuild-redeploy-frontend-ai",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache frontend ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps frontend ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "rebuild-redeploy-ai-frontend-auth",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache frontend ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps frontend ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "rebuild-redeploy-frontend-ai-alignment",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache frontend ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps frontend ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "rebuild-redeploy-ai-fallback",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "inspect-ai-detector-failures",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 300 ai-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "rebuild-redeploy-ai-frontend-diagnostics",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache frontend ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate frontend ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps frontend ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "rebuild-redeploy-phase-pipeline",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache ai-service frontend pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate ai-service frontend pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service frontend pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "ps-phase-pipeline-services",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service frontend pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "up-phase-pipeline-services",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build pdf-worker-service ai-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate pdf-worker-service ai-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service frontend pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "verify-phase-pipeline-health",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Invoke-RestMethod -Method GET -Uri http://localhost:18008/health | ConvertTo-Json -Depth 3; Invoke-RestMethod -Method GET -Uri http://localhost:18004/health | ConvertTo-Json -Depth 3"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-ai-env-detector-order",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service printenv | Select-String -Pattern \"DETECTOR_ORDER|PDF_WORKER_INTERNAL_URL|AUTH_REQUIRED\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-frontend-bundle-for-pdf-worker",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T frontend sh -lc \"grep -R \\\"pdf_worker\\\" -n /app/src /app/dist 2>/dev/null | head -n 20\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-ai-env-detector-order-v2",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service sh -lc 'env | grep -E \"DETECTOR_ORDER|PDF_WORKER_INTERNAL_URL|AUTH_REQUIRED\"'"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-frontend-src-pdf-worker-v2",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T frontend sh -lc 'grep -R \"pdf_worker\" -n /app/src | head -n 20'"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "inspect-ai-detector-chain-runtime",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 300 ai-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-ai-env-vars-direct",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service printenv DETECTOR_ORDER; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service printenv PDF_WORKER_INTERNAL_URL; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service printenv AUTH_REQUIRED"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-ai-to-pdf-worker-connectivity",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service sh -lc \"python - <<'PY'\nimport urllib.request\nprint(urllib.request.urlopen('http://pdf-worker-service:8000/health', timeout=10).read().decode())\nPY\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "rebuild-redeploy-ai-frontend-detector-hardening",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build ai-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate ai-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service frontend pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "inspect-ai-detector-chain-runtime-now",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 220 ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "rebuild-redeploy-ai-pdf-worker-libgl-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache pdf-worker-service ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate pdf-worker-service ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "compose-ps-ai-pdf-worker-after-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "probe-pdf-worker-health-and-cv2",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service python -c \"import cv2; print('cv2_ok');\"; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service python -c \"import urllib.request; print(urllib.request.urlopen('http://pdf-worker-service:8000/health', timeout=10).read().decode())\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "pdf-worker-cv2-import-check",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service python -c \"import cv2; print('cv2_ok')\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "ai-to-pdf-worker-health-check-via-wget",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service wget -qO- http://pdf-worker-service:8000/health"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "recent-ai-pdf-worker-logs-after-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 140 ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "rebuild-recreate-pdf-worker-only-libgl-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "ps-pdf-worker-created-after-rebuild",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "compose-ps-after-phase-pipeline",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service frontend pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "pdf-worker-python-import-cv2-exitcheck",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service python -c \"import cv2\"; if ($LASTEXITCODE -eq 0) { Write-Output CV2_IMPORT_OK }"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "pdf-worker-cv2-import-check-v2",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service sh -lc \"python -c 'import cv2; print(\\\"CV2_IMPORT_OK\\\")'\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-libgl-file-in-pdf-worker",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service ls /usr/lib/x86_64-linux-gnu/libGL.so.1"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "host-check-pdf-worker-health-http",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Invoke-RestMethod -Method Get -Uri http://localhost:18008/health | ConvertTo-Json -Compress"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "host-check-ai-health-http",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Invoke-RestMethod -Method Get -Uri http://localhost:18004/health | ConvertTo-Json -Compress"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "recent-libgl-errors-last-10m",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --since 10m ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "rebuild-redeploy-ai-frontend-pdf-worker-dwg-bridge",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build ai-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate ai-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service frontend pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "tail-ai-pdf-worker-logs-after-dwg-bridge",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --since 3m ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "rebuild-recreate-pdf-worker-libgomp-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "ps-pdf-worker-after-libgomp-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-libgomp-file-in-pdf-worker",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service ls /usr/lib/x86_64-linux-gnu/libgomp.so.1"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-libgomp-alt-path-pdf-worker",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service ls /lib/x86_64-linux-gnu/libgomp.so.1"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-dpkg-libgomp-in-container",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service sh -lc \"dpkg -l | grep libgomp || true\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "check-libgomp-package-status",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service dpkg -s libgomp1"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "build-pdf-worker-and-verify-libgomp-in-image",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache pdf-worker-service; docker run --rm docker-pdf-worker-service dpkg -s libgomp1"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "verify-libgomp-in-latest-pdf-worker-image",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"docker run --rm docker-pdf-worker-service dpkg -s libgomp1"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "recreate-pdf-worker-from-latest-image",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service dpkg -s libgomp1"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "logs-after-pdf-worker-libgomp-recreate",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --since 2m ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "inspect-pdf-worker-current-failure",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 200 ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "rebuild-redeploy-ai-pdfworker-setuptools-florence-skip",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache pdf-worker-service ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate pdf-worker-service ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "verify-pdf-worker-setuptools-and-ai-env",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service python -c \"import setuptools; print(setuptools.__version__)\"; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service printenv FLORENCE2_ENDPOINT"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "tail-detector-errors-after-fixes",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --since 5m ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "verify-setuptools-in-built-worker-image",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"docker run --rm docker-pdf-worker-service pip show setuptools"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "force-recreate-pdf-worker-new-image",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "verify-setuptools-in-running-worker",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service pip show setuptools"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "rebuild-recreate-pdf-worker-setuptools-hardfix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "verify-running-worker-setuptools-hardfix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service python -c \"import setuptools; print('SETUPTOOLS_OK')\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "verify-ai-florence-env-and-recent-logs",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service printenv FLORENCE2_ENDPOINT; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --since 3m ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "pip-show-setuptools-running-worker",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service pip show setuptools"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "tail-fresh-detector-logs-2m",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --since 2m ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "rebuild-recreate-pdf-worker-no-500-ocr-fallback",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "tail-pdf-worker-post-fallback-build",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --since 5m pdf-worker-service ai-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "recreate-ai-service-for-florence-skip",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "compose-ps-all-after-ai-recreate",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "inspect-running-image-ids",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"docker ps --filter \"name=docker-ai-service-1\" --filter \"name=docker-pdf-worker-service-1\" --format \"table {{.Names}}\\t{{.Image}}\\t{{.ID}}\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "inspect-running-ai-code-snippets",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service sh -lc \"grep -n \\\"def _is_florence_configured\\\" /app/app/api/routes.py; grep -n \\\"florence2 detector requested\\\" /app/app/api/routes.py; grep -n \\\"detectors = \\['paddleocr_opencv', 'heuristic'\\]\\\" /app/app/api/routes.py\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "inspect-running-pdf-worker-code-snippets",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T pdf-worker-service sh -lc \"grep -n \\\"OCR engine unavailable\\\" /app/app/api/routes.py; grep -n \\\"Skipped clearance placement\\\" /app/app/api/routes.py\""
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "inspect-ai-container-image-id",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"docker inspect docker-ai-service-1 --format '{{.Image}}'"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "inspect-pdf-worker-container-image-id",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"docker inspect docker-pdf-worker-service-1 --format '{{.Image}}'"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "latest-ai-pdf-worker-runtime-logs",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 120 ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "latest-ai-only-logs",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 80 ai-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "force-recreate-ai-only-no-deps",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "recreate-ai-after-timeout-and-plan-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps ai-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T ai-service printenv PDF_WORKER_TIMEOUT_SECONDS; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "tail-ai-pdf-worker-after-final-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 80 ai-service pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "frontend-build-after-annotation-alignment-fixes",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps frontend"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "frontend-rebuild-after-coordinate-transform-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps frontend"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "rebuild-recreate-pdf-worker-anchor-center-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "ps-pdf-worker-after-center-anchor-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "force-recreate-pdf-worker-after-center-anchor-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps pdf-worker-service; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps pdf-worker-service"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "rebuild-recreate-alignment-and-numbering-fix-stack",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build ai-service pdf-worker-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps ai-service pdf-worker-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service pdf-worker-service frontend"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "frontend-rebuild-after-incircle-and-alignment-fix",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps frontend"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "docker-build-latest-ai-pdf-worker-frontend",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml build ai-service pdf-worker-service frontend"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "deploy-fresh-ai-pdf-worker-frontend-images",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				"Set-Location deploy/docker; docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps ai-service pdf-worker-service frontend; docker compose -f docker-compose.yml -f docker-compose.dev.yml ps ai-service pdf-worker-service frontend"
+			],
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

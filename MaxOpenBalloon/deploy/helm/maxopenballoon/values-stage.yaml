@@ -1,0 +1,24 @@
+replicaCount: 2
+
+image:
+  tag: stage
+  pullPolicy: IfNotPresent
+
+auth:
+  required: true
+  oidcIssuer: https://auth.edge.example.com/application/o/maxopenballoon/
+  oidcJwksUrl: ""
+  oidcAudience: maxopenballoon-stage
+  tenantClaim: tenant_id
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1024Mi

@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: maxopenballoon
+  name: maxopenballoon-prod
   namespace: argocd
 spec:
   project: default
@@ -9,9 +9,12 @@ spec:
     repoURL: https://github.com/ssamax10/max_draw_editor.git
     targetRevision: HEAD
     path: MaxOpenBalloon/deploy/helm/maxopenballoon
+    helm:
+      valueFiles:
+        - values-prod.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: maxopenballoon
+    namespace: maxopenballoon-prod
   syncPolicy:
     automated:
       prune: true

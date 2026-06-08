@@ -1,0 +1,47 @@
+openapi: 3.1.0
+info:
+  title: DWG Translation Service API
+  version: 1.2.0
+servers:
+  - url: /dwg-translation
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: OK
+  /health/live:
+    get:
+      responses:
+        '200':
+          description: Liveness status
+  /health/ready:
+    get:
+      responses:
+        '200':
+          description: Readiness status
+  /tenant-context:
+    get:
+      responses:
+        '200':
+          description: Tenant context
+  /translate/dwg:
+    post:
+      summary: Submit DWG translation request
+      responses:
+        '200':
+          description: Translation job accepted
+  /translate/dwg/{job_id}:
+    get:
+      summary: Get DWG translation job status
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Translation job
+        '404':
+          description: Not found

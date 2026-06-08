@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: {{ .Chart.Name }}-drawing-service
 spec:
-  replicas: 2
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: {{ .Chart.Name }}-drawing-service
@@ -15,5 +15,19 @@ spec:
       containers:
         - name: drawing-service
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: AUTH_REQUIRED
+              value: {{ .Values.auth.required | quote }}
+            - name: OIDC_ISSUER
+              value: {{ .Values.auth.oidcIssuer | quote }}
+            - name: OIDC_JWKS_URL
+              value: {{ .Values.auth.oidcJwksUrl | quote }}
+            - name: OIDC_AUDIENCE
+              value: {{ .Values.auth.oidcAudience | quote }}
+            - name: TENANT_CLAIM
+              value: {{ .Values.auth.tenantClaim | quote }}
           ports:
             - containerPort: 8000
+          resources:
+{{ toYaml .Values.resources | nindent 12 }}

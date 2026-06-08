@@ -1,17 +1,33 @@
-openapi: 3.1.0
+﻿openapi: 3.1.0
 info:
   title: MCP Service API
-  version: 1.0.0
+  version: 1.2.0
 servers:
   - url: /mcp
 paths:
   /health:
     get:
       responses:
-        '200':
-          description: OK
+        '200': { description: OK }
+  /health/live:
+    get:
+      responses:
+        '200': { description: Liveness status }
+  /health/ready:
+    get:
+      responses:
+        '200': { description: Readiness status }
+  /tenant-context:
+    get:
+      responses:
+        '200': { description: Tenant context }
   /mcp/tools:
     get:
       responses:
-        '200':
-          description: Tool registry
+        '200': { description: Tool registry }
+  /mcp/invoke:
+    post:
+      summary: Invoke MCP tool
+      responses:
+        '200': { description: Invocation result }
+        '404': { description: Tool not found }

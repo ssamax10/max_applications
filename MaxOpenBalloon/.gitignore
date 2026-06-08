@@ -7,3 +7,4 @@ dist/
 .env
 coverage/
 .pytest_cache/
+.dual-graph/

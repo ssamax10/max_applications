@@ -1,10 +1,46 @@
+x-service-env: &service_env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-max}:${POSTGRES_PASSWORD:-draw}@postgres:5432/${POSTGRES_DB:-maxopenballoon}
+  REDIS_URL: redis://redis:6379/0
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+  OIDC_JWKS_URL: ${OIDC_JWKS_URL:-}
+  OIDC_ISSUER: ${OIDC_ISSUER:-https://auth.edge.example.com/application/o/maxopenballoon/}
+  OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
+  AUTH_REQUIRED: ${AUTH_REQUIRED:-false}
+  TENANT_CLAIM: ${TENANT_CLAIM:-tenant_id}
+  ALLOW_TENANT_HEADER_FALLBACK: ${ALLOW_TENANT_HEADER_FALLBACK:-false}
+  CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OPENFGA_URL: ${OPENFGA_URL:-http://openfga:8080}
+  DETECTOR_ORDER: ${DETECTOR_ORDER:-pdf_worker,paddleocr_opencv,florence2,hybrid,heuristic}
+  FLORENCE2_ENDPOINT: ${FLORENCE2_ENDPOINT:-}
+  FLORENCE2_TIMEOUT_SECONDS: ${FLORENCE2_TIMEOUT_SECONDS:-20}
+  PDF_WORKER_INTERNAL_URL: ${PDF_WORKER_INTERNAL_URL:-http://pdf-worker-service:8000}
+  PDF_WORKER_TIMEOUT_SECONDS: ${PDF_WORKER_TIMEOUT_SECONDS:-180}
+  DWG_TRANSLATION_INTERNAL_URL: ${DWG_TRANSLATION_INTERNAL_URL:-http://dwg-translation-service:8000}
+  DWG_CONVERSION_ENGINE: ${DWG_CONVERSION_ENGINE:-qcad}
+  QCAD_CMD: ${QCAD_CMD:-/usr/bin/qcad}
+  QCAD_SCRIPT_PATH: ${QCAD_SCRIPT_PATH:-/app/app/scripts/qcad_dwg_to_pdf.js}
+  CONVERSION_TIMEOUT_SECONDS: ${CONVERSION_TIMEOUT_SECONDS:-600}
+
 services:
   frontend:
     build:
       context: ../../apps/frontend
       dockerfile: Dockerfile
+    environment:
+      VITE_DRAWING_API_BASE: ${VITE_DRAWING_API_BASE:-http://localhost:18001}
+      VITE_OIDC_ISSUER: ${VITE_OIDC_ISSUER:-${OIDC_ISSUER:-https://auth.edge.example.com/application/o/maxopenballoon/}}
+      VITE_OIDC_CLIENT_ID: ${VITE_OIDC_CLIENT_ID:-maxopenballoon-frontend}
+      VITE_OIDC_REDIRECT_URI: ${VITE_OIDC_REDIRECT_URI:-http://localhost:${FRONTEND_PORT:-5173}}
+      VITE_OIDC_SCOPE: ${VITE_OIDC_SCOPE:-openid profile email}
+      VITE_OIDC_AUDIENCE: ${VITE_OIDC_AUDIENCE:-${OIDC_AUDIENCE:-}}
+      VITE_OIDC_AUTHORIZATION_ENDPOINT: ${VITE_OIDC_AUTHORIZATION_ENDPOINT:-}
+      VITE_OIDC_TOKEN_ENDPOINT: ${VITE_OIDC_TOKEN_ENDPOINT:-}
+      VITE_TENANT_CLAIM: ${VITE_TENANT_CLAIM:-${TENANT_CLAIM:-tenant_id}}
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-5173}:5173"
     depends_on:
       - drawing-service
 
@@ -13,93 +49,176 @@ services:
       context: ../../services/drawing-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://postgres/maxopenballoon?host=postgres
-      REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
-      OIDC_ISSUER: http://authentik:9000/application/o/maxopenballoon/
-      OPENFGA_URL: http://openfga:8080
+      <<: *service_env
     ports:
-      - "8001:8000"
+      - "${DRAWING_SERVICE_PORT:-18001}:8000"
     depends_on:
       - postgres
       - redis
       - minio
-      - authentik
       - openfga
 
   geometry-service:
     build:
       context: ../../services/geometry-service
       dockerfile: Dockerfile
+    environment:
+      <<: *service_env
     ports:
-      - "8002:8000"
+      - "${GEOMETRY_SERVICE_PORT:-18002}:8000"
+    depends_on:
+      - postgres
+      - redis
+      - minio
 
   balloon-service:
     build:
       context: ../../services/balloon-service
       dockerfile: Dockerfile
+    environment:
+      <<: *service_env
     ports:
-      - "8003:8000"
+      - "${BALLOON_SERVICE_PORT:-18003}:8000"
+    depends_on:
+      - postgres
+      - redis
+      - minio
 
   ai-service:
     build:
       context: ../../services/ai-service
       dockerfile: Dockerfile
+    environment:
+      <<: *service_env
     ports:
-      - "8004:8000"
+      - "${AI_SERVICE_PORT:-18004}:8000"
+    depends_on:
+      - postgres
+      - redis
+      - minio
+      - pdf-worker-service
+
+  pdf-worker-service:
+    build:
+      context: ../../services/pdf-worker-service
+      dockerfile: Dockerfile
+    environment:
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    ports:
+      - "${PDF_WORKER_SERVICE_PORT:-18008}:8000"
 
   mcp-service:
     build:
       context: ../../services/mcp-service
       dockerfile: Dockerfile
+    environment:
+      <<: *service_env
     ports:
-      - "8005:8000"
+      - "${MCP_SERVICE_PORT:-18005}:8000"
+    depends_on:
+      - postgres
+      - redis
+      - minio
 
   revision-service:
     build:
       context: ../../services/revision-service
       dockerfile: Dockerfile
+    environment:
+      <<: *service_env
     ports:
-      - "8006:8000"
+      - "${REVISION_SERVICE_PORT:-18006}:8000"
+    depends_on:
+      - postgres
+      - redis
+      - minio
 
   dwg-translation-service:
     build:
       context: ../../services/dwg-translation-service
       dockerfile: Dockerfile
+    environment:
+      <<: *service_env
+      PUBLIC_BASE_URL: ${DWG_TRANSLATION_PUBLIC_BASE_URL:-http://localhost:18007}
     ports:
-      - "8007:8000"
+      - "${DWG_TRANSLATION_SERVICE_PORT:-18007}:8000"
+    depends_on:
+      - postgres
+      - redis
+      - minio
 
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: maxopenballoon
-      POSTGRES_USER: max
-      POSTGRES_PASSWORD: draw
+      POSTGRES_DB: ${POSTGRES_DB:-maxopenballoon}
+      POSTGRES_USER: ${POSTGRES_USER:-max}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-draw}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../db/schemas:/docker-entrypoint-initdb.d:ro
 
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
 
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_API_PORT:-9010}:9000"
+      - "${MINIO_CONSOLE_PORT:-9011}:9001"
+    volumes:
+      - minio_data:/data
 
   openfga:
     image: openfga/openfga:latest
     command: run
     ports:
-      - "8080:8080"
+      - "${OPENFGA_PORT:-8081}:8080"
 
   authentik:
     image: ghcr.io/goauthentik/server:2025.2
+    command: server
+    profiles:
+      - local-auth
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change_me_authentik_secret}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__NAME: ${POSTGRES_DB:-maxopenballoon}
+      AUTHENTIK_POSTGRESQL__USER: ${POSTGRES_USER:-max}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD:-draw}
+    depends_on:
+      - postgres
+      - redis
     ports:
-      - "9000:9000"
+      - "${AUTHENTIK_PORT:-19000}:9000"
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2025.2
+    command: worker
+    profiles:
+      - local-auth
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change_me_authentik_secret}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__NAME: ${POSTGRES_DB:-maxopenballoon}
+      AUTHENTIK_POSTGRESQL__USER: ${POSTGRES_USER:-max}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD:-draw}
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

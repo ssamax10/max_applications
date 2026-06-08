@@ -1,0 +1,45 @@
+services:
+  frontend:
+    volumes:
+      - ../../apps/frontend:/app
+      - /app/node_modules
+
+  drawing-service:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ../../services/drawing-service/app:/app/app
+
+  geometry-service:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ../../services/geometry-service/app:/app/app
+
+  balloon-service:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ../../services/balloon-service/app:/app/app
+
+  ai-service:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ../../services/ai-service/app:/app/app
+
+  pdf-worker-service:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ../../services/pdf-worker-service/app:/app/app
+
+  mcp-service:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ../../services/mcp-service/app:/app/app
+
+  revision-service:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ../../services/revision-service/app:/app/app
+
+  dwg-translation-service:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ../../services/dwg-translation-service/app:/app/app
