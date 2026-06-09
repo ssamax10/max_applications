@@ -20,6 +20,9 @@ defaultResources:
 services:
   frontend:
     replicas: 3
+    image:
+      tag: v0.9.3
+      pullPolicy: Always
     env:
       VITE_OIDC_ISSUER: https://apps.maxautocables.com/application/o/openballoon-maxauto/
       VITE_OIDC_CLIENT_ID: pUDiYjGaIpKBnaFjlDhp3UfHum7gBj3dZghLHkCP

@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -84,6 +84,7 @@ export function AnnotationLayer({
   stageRef,
   exportPreviewOnly = false,
 }: AnnotationLayerProps) {
+  const internalStageRef = useRef<any>(null);
   const safeCount = Math.max(1, Math.min(featureCount || 3, 8));
   const markers = Array.from({ length: safeCount }, (_, index) => ({
     id: index + 1,
@@ -100,8 +101,16 @@ export function AnnotationLayer({
   const [drawingLayerDimensions, setDrawingLayerDimensions] = useState<LayerDimensions | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
   const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 });
+  const [stageRotation, setStageRotation] = useState(0);
   const minZoom = 0.2;
   const maxZoom = 8;
+
+  useEffect(() => {
+    if (!stageRef) {
+      return;
+    }
+    (stageRef as any).current = internalStageRef.current;
+  });
 
   useEffect(() => {
     function updateViewport() {
@@ -173,7 +182,7 @@ export function AnnotationLayer({
 
       if (drawingLayerFormat === "SVG") {
         try {
-          const svgResponse = await fetch(layerUrl);
+          const svgResponse = await fetch(layerUrl as string);
           const svgText = await svgResponse.text();
           parsedDimensions = parseSvgDimensions(svgText);
           if (!cancelled) {
@@ -272,15 +281,24 @@ export function AnnotationLayer({
 
   function applyZoom(nextScale: number, anchor: { x: number; y: number }) {
     const clampedScale = Math.max(minZoom, Math.min(maxZoom, nextScale));
-    const worldPoint = {
-      x: (anchor.x - stagePosition.x) / zoomScale,
-      y: (anchor.y - stagePosition.y) / zoomScale,
-    };
+    const stage = internalStageRef.current;
+    if (!stage) {
+      return;
+    }
+
+    const worldPoint = stage.getAbsoluteTransform().copy().invert().point(anchor);
+    const radians = (stageRotation * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const offsetX = canvasWidth / 2;
+    const offsetY = canvasHeight / 2;
+    const rotatedX = (worldPoint.x - offsetX) * clampedScale;
+    const rotatedY = (worldPoint.y - offsetY) * clampedScale;
 
     setZoomScale(clampedScale);
     setStagePosition({
-      x: anchor.x - worldPoint.x * clampedScale,
-      y: anchor.y - worldPoint.y * clampedScale,
+      x: anchor.x - offsetX - (rotatedX * cos - rotatedY * sin),
+      y: anchor.y - offsetY - (rotatedX * sin + rotatedY * cos),
     });
   }
 
@@ -291,6 +309,37 @@ export function AnnotationLayer({
   function resetViewport() {
     setZoomScale(1);
     setStagePosition({ x: 0, y: 0 });
+  }
+
+  function applyRotation(nextRotation: number, anchor: { x: number; y: number }) {
+    const stage = internalStageRef.current;
+    if (!stage) {
+      return;
+    }
+
+    const normalizedRotation = ((nextRotation % 360) + 360) % 360;
+    const worldPoint = stage.getAbsoluteTransform().copy().invert().point(anchor);
+    const radians = (normalizedRotation * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const offsetX = canvasWidth / 2;
+    const offsetY = canvasHeight / 2;
+    const rotatedX = (worldPoint.x - offsetX) * zoomScale;
+    const rotatedY = (worldPoint.y - offsetY) * zoomScale;
+
+    setStageRotation(normalizedRotation);
+    setStagePosition({
+      x: anchor.x - offsetX - (rotatedX * cos - rotatedY * sin),
+      y: anchor.y - offsetY - (rotatedX * sin + rotatedY * cos),
+    });
+  }
+
+  function rotateFromCenter(deltaDegrees: number) {
+    applyRotation(stageRotation + deltaDegrees, { x: canvasWidth / 2, y: canvasHeight / 2 });
+  }
+
+  function resetRotation() {
+    applyRotation(0, { x: canvasWidth / 2, y: canvasHeight / 2 });
   }
 
   function fitToDrawing() {
@@ -305,20 +354,30 @@ export function AnnotationLayer({
         <button type="button" onClick={() => zoomFromCenter(1.15)}>Zoom In</button>
         <button type="button" className="secondary" onClick={fitToDrawing}>Fit Drawing</button>
         <button type="button" className="secondary" onClick={resetViewport}>Reset View</button>
+        <button type="button" className="secondary" onClick={() => rotateFromCenter(-90)}>Rotate Left</button>
+        <button type="button" className="secondary" onClick={() => rotateFromCenter(90)}>Rotate Right</button>
+        <button type="button" className="secondary" onClick={resetRotation}>Reset Rotation</button>
         <span style={{ color: "#8c6b47", fontSize: 13 }}>Zoom: {Math.round(zoomScale * 100)}%</span>
+        <span style={{ color: "#8c6b47", fontSize: 13 }}>Rotation: {stageRotation} deg</span>
       </div>
 
       <Stage
         width={canvasWidth}
         height={canvasHeight}
-        ref={stageRef}
+        ref={internalStageRef}
         draggable
-        x={stagePosition.x}
-        y={stagePosition.y}
+        x={stagePosition.x + canvasWidth / 2}
+        y={stagePosition.y + canvasHeight / 2}
+        offsetX={canvasWidth / 2}
+        offsetY={canvasHeight / 2}
         scaleX={zoomScale}
         scaleY={zoomScale}
+        rotation={stageRotation}
         onDragEnd={(event) => {
-          setStagePosition({ x: event.target.x(), y: event.target.y() });
+          setStagePosition({
+            x: event.target.x() - canvasWidth / 2,
+            y: event.target.y() - canvasHeight / 2,
+          });
         }}
         onWheel={(event) => {
           event.evt.preventDefault();
