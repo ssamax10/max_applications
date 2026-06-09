@@ -45,6 +45,9 @@ services:
     replicas: 3
   pdf-worker-service:
     replicas: 3
+    image:
+      tag: v0.9.3
+      pullPolicy: Always
   postgres:
     replicas: 1
   redis:
