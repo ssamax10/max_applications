@@ -4,9 +4,9 @@ global:
 
 auth:
   required: true
-  oidcIssuer: https://auth.edge.example.com/application/o/maxopenballoon/
-  oidcJwksUrl: ""
-  oidcAudience: maxopenballoon
+  oidcIssuer: https://apps.maxautocables.com/application/o/openballoon-maxauto/
+  oidcJwksUrl: https://apps.maxautocables.com/application/o/openballoon-maxauto/jwks/
+  oidcAudience:
   tenantClaim: tenant_id
 
 defaultResources:
@@ -20,6 +20,12 @@ defaultResources:
 services:
   frontend:
     replicas: 3
+    env:
+      VITE_OIDC_ISSUER: https://apps.maxautocables.com/application/o/openballoon-maxauto/
+      VITE_OIDC_CLIENT_ID: pUDiYjGaIpKBnaFjlDhp3UfHum7gBj3dZghLHkCP
+      VITE_OIDC_SCOPE: openid profile email
+      VITE_OIDC_AUDIENCE:
+      VITE_TENANT_CLAIM: tenant_id
   drawing-service:
     replicas: 3
   geometry-service:
