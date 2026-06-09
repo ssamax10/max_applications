@@ -70,20 +70,40 @@ function resolveUploadPayload(input: unknown): { blob: Blob; filename: string } 
   throw new Error("Selected drawing is not a valid file blob. Please re-select the file and try again.");
 }
 
-const servicePorts = {
-  drawing: 18001,
-  geometry: 18002,
-  balloon: 18003,
-  ai: 18004,
-  mcp: 18005,
-  revision: 18006,
-  dwg: 18007,
+type ServiceName = "drawing" | "geometry" | "balloon" | "ai" | "mcp" | "revision" | "dwg";
+
+const serviceDefaults: Record<ServiceName, string> = {
+  drawing: "/api/drawing",
+  geometry: "/api/geometry",
+  balloon: "/api/balloon",
+  ai: "/api/ai",
+  mcp: "/api/mcp",
+  revision: "/api/revision",
+  dwg: "/api/dwg",
 };
 
-function serviceBase(port: number): string {
-  const protocol = window.location.protocol;
-  const hostname = window.location.hostname || "localhost";
-  return `${protocol}//${hostname}:${port}`;
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+function resolveServiceBase(service: ServiceName): string {
+  const env = import.meta.env;
+  const envKeys: Record<ServiceName, string> = {
+    drawing: "VITE_DRAWING_API_BASE",
+    geometry: "VITE_GEOMETRY_API_BASE",
+    balloon: "VITE_BALLOON_API_BASE",
+    ai: "VITE_AI_API_BASE",
+    mcp: "VITE_MCP_API_BASE",
+    revision: "VITE_REVISION_API_BASE",
+    dwg: "VITE_DWG_API_BASE",
+  };
+
+  const envValue = String(env[envKeys[service] as keyof ImportMetaEnv] ?? "").trim();
+  if (envValue) {
+    return trimTrailingSlash(envValue);
+  }
+
+  return trimTrailingSlash(serviceDefaults[service]);
 }
 
 async function postJson<T>(url: string, tenantId: string, body: unknown): Promise<T> {
@@ -186,7 +206,7 @@ export async function uploadDrawingFile(
     ? { ...baseHeaders, Authorization: `Bearer ${initialToken}` }
     : { ...baseHeaders };
 
-  const response = await fetch(`${serviceBase(servicePorts.drawing)}/drawings/upload`, {
+  const response = await fetch(`${resolveServiceBase("drawing")}/drawings/upload`, {
     method: "POST",
     headers,
     body: formData,
@@ -201,7 +221,7 @@ export async function uploadDrawingFile(
       try {
         const refreshed = await refreshOidcSession(true);
         if (refreshed?.accessToken && refreshed.accessToken !== initialToken) {
-          const retry = await fetch(`${serviceBase(servicePorts.drawing)}/drawings/upload`, {
+          const retry = await fetch(`${resolveServiceBase("drawing")}/drawings/upload`, {
             method: "POST",
             headers: {
               ...baseHeaders,
@@ -223,7 +243,7 @@ export async function uploadDrawingFile(
     }
 
     if (response.status === 401 && /missing bearer token|invalid bearer token/i.test(detail)) {
-      const fallback = await fetch(`${serviceBase(servicePorts.drawing)}/drawings/upload`, {
+      const fallback = await fetch(`${resolveServiceBase("drawing")}/drawings/upload`, {
         method: "POST",
         headers: baseHeaders,
         body: formData,
@@ -249,7 +269,7 @@ export async function createDrawing(
   sourceFormat: "DWG" | "DXF" | "PDF" | "SVG",
 ): Promise<DrawingRecord> {
   return requestJson<DrawingRecord>(
-    `${serviceBase(servicePorts.drawing)}/drawings`,
+    `${resolveServiceBase("drawing")}/drawings`,
     session,
     "POST",
     {
@@ -277,7 +297,7 @@ export async function autoBalloon(
     attempted_detectors?: string[];
     detector_diagnostics?: Record<string, string>;
   }>(
-    `${serviceBase(servicePorts.ai)}/ai/suggest-balloons`,
+    `${resolveServiceBase("ai")}/ai/suggest-balloons`,
     session,
     "POST",
     {
@@ -321,7 +341,7 @@ export async function autoBalloon(
     };
 
     const created = await requestJson<BalloonRecord>(
-      `${serviceBase(servicePorts.balloon)}/balloons`,
+      `${resolveServiceBase("balloon")}/balloons`,
       session,
       "POST",
       {
@@ -349,7 +369,7 @@ export async function createBalloon(
   geometry: Record<string, unknown>,
 ): Promise<BalloonRecord> {
   return requestJson<BalloonRecord>(
-    `${serviceBase(servicePorts.balloon)}/balloons`,
+    `${resolveServiceBase("balloon")}/balloons`,
     session,
     "POST",
     {
@@ -362,7 +382,7 @@ export async function createBalloon(
 
 export async function listBalloons(session: SessionContext, drawingId: string): Promise<BalloonRecord[]> {
   return requestJson<BalloonRecord[]>(
-    `${serviceBase(servicePorts.balloon)}/drawings/${drawingId}/balloons`,
+    `${resolveServiceBase("balloon")}/drawings/${drawingId}/balloons`,
     session,
     "GET",
   );
@@ -374,7 +394,7 @@ export async function updateBalloon(
   patch: { label?: string; geometry?: Record<string, unknown> },
 ): Promise<BalloonRecord> {
   return requestJson<BalloonRecord>(
-    `${serviceBase(servicePorts.balloon)}/balloons/${balloonId}`,
+    `${resolveServiceBase("balloon")}/balloons/${balloonId}`,
     session,
     "PATCH",
     patch,
@@ -392,7 +412,7 @@ export async function deleteBalloon(session: SessionContext, balloonId: string):
     ? { ...baseHeaders, Authorization: `Bearer ${initialToken}` }
     : { ...baseHeaders };
 
-  let response = await fetch(`${serviceBase(servicePorts.balloon)}/balloons/${balloonId}`, {
+  let response = await fetch(`${resolveServiceBase("balloon")}/balloons/${balloonId}`, {
     method: "DELETE",
     headers,
   });
@@ -406,7 +426,7 @@ export async function deleteBalloon(session: SessionContext, balloonId: string):
       try {
         const refreshed = await refreshOidcSession(true);
         if (refreshed?.accessToken && refreshed.accessToken !== initialToken) {
-          response = await fetch(`${serviceBase(servicePorts.balloon)}/balloons/${balloonId}`, {
+          response = await fetch(`${resolveServiceBase("balloon")}/balloons/${balloonId}`, {
             method: "DELETE",
             headers: {
               ...baseHeaders,
@@ -426,7 +446,7 @@ export async function deleteBalloon(session: SessionContext, balloonId: string):
     }
 
     if (response.status === 401 && /missing bearer token|invalid bearer token/i.test(detail)) {
-      response = await fetch(`${serviceBase(servicePorts.balloon)}/balloons/${balloonId}`, {
+      response = await fetch(`${resolveServiceBase("balloon")}/balloons/${balloonId}`, {
         method: "DELETE",
         headers: baseHeaders,
       });
@@ -448,7 +468,7 @@ export async function convertDrawing(
   targetFormat: "SVG" | "PDF",
 ): Promise<TranslationJob> {
   return requestJson<TranslationJob>(
-    `${serviceBase(servicePorts.dwg)}/translate/dwg`,
+    `${resolveServiceBase("dwg")}/translate/dwg`,
     session,
     "POST",
     {
@@ -460,7 +480,7 @@ export async function convertDrawing(
 
 export async function runFeatureFlow(tenantId: string): Promise<ServiceResult> {
   const drawing = await postJson<{ id: string }>(
-    `${serviceBase(servicePorts.drawing)}/drawings`,
+    `${resolveServiceBase("drawing")}/drawings`,
     tenantId,
     {
       source_uri: "minio://drawings/ui-sample-1.dwg",
@@ -469,7 +489,7 @@ export async function runFeatureFlow(tenantId: string): Promise<ServiceResult> {
   );
 
   const balloon = await postJson<{ id: string }>(
-    `${serviceBase(servicePorts.balloon)}/balloons`,
+    `${resolveServiceBase("balloon")}/balloons`,
     tenantId,
     {
       drawing_id: drawing.id,
@@ -479,7 +499,7 @@ export async function runFeatureFlow(tenantId: string): Promise<ServiceResult> {
   );
 
   const revision = await postJson<{ revision_number: number }>(
-    `${serviceBase(servicePorts.revision)}/revisions`,
+    `${resolveServiceBase("revision")}/revisions`,
     tenantId,
     {
       drawing_id: drawing.id,
@@ -488,7 +508,7 @@ export async function runFeatureFlow(tenantId: string): Promise<ServiceResult> {
   );
 
   const geometry = await postJson<{ features: unknown[] }>(
-    `${serviceBase(servicePorts.geometry)}/geometry/extract`,
+    `${resolveServiceBase("geometry")}/geometry/extract`,
     tenantId,
     {
       drawing_id: drawing.id,
@@ -497,7 +517,7 @@ export async function runFeatureFlow(tenantId: string): Promise<ServiceResult> {
   );
 
   const ai = await postJson<{ suggestions: unknown[] }>(
-    `${serviceBase(servicePorts.ai)}/ai/suggest-balloons`,
+    `${resolveServiceBase("ai")}/ai/suggest-balloons`,
     tenantId,
     {
       drawing_id: drawing.id,
@@ -506,7 +526,7 @@ export async function runFeatureFlow(tenantId: string): Promise<ServiceResult> {
   );
 
   const dwg = await postJson<{ job_id: string }>(
-    `${serviceBase(servicePorts.dwg)}/translate/dwg`,
+    `${resolveServiceBase("dwg")}/translate/dwg`,
     tenantId,
     {
       source_uri: "minio://drawings/ui-sample-1.dwg",
@@ -515,7 +535,7 @@ export async function runFeatureFlow(tenantId: string): Promise<ServiceResult> {
   );
 
   const mcp = await postJson<{ tool: string }>(
-    `${serviceBase(servicePorts.mcp)}/mcp/invoke`,
+    `${resolveServiceBase("mcp")}/mcp/invoke`,
     tenantId,
     {
       tool: "balloon.create",
