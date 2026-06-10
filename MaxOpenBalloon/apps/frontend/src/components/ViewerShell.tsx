@@ -176,7 +176,7 @@ export function ViewerShell() {
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<ServiceResult | null>(null);
   const [aiSuggestionCount, setAiSuggestionCount] = useState(0);
-  const [detectorMode, setDetectorMode] = useState<"paddleocr_opencv" | "heuristic" | "florence2" | "hybrid">("paddleocr_opencv");
+  const [detectorMode, setDetectorMode] = useState<"paddleocr_opencv" | "heuristic" | "florence2" | "hybrid" | "pdf_worker">("paddleocr_opencv");
   const [lastDetectorUsed, setLastDetectorUsed] = useState<string | null>(null);
   const [lastAttemptedDetectors, setLastAttemptedDetectors] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -418,6 +418,7 @@ export function ViewerShell() {
     }
 
     setError(null);
+    setLoadStatus("Running Auto Balloon...");
     try {
       const response = await autoBalloon(session, drawingId, 60, detectorMode);
       const created = response.balloons;
@@ -446,8 +447,10 @@ export function ViewerShell() {
         setEditTextColor(geometryTextColor(first.geometry));
         setEditFontFamily(geometryFontFamily(first.geometry));
       }
+      setLoadStatus(`Auto Balloon completed: ${created.length} created using ${response.detectorUsed}.`);
     } catch (balloonError) {
       setError(balloonError instanceof Error ? balloonError.message : "Failed to auto-balloon drawing");
+      setLoadStatus("Auto Balloon failed.");
     }
   }
 
@@ -1104,12 +1107,13 @@ export function ViewerShell() {
             <select
               id="detector-mode"
               value={detectorMode}
-              onChange={(event) => setDetectorMode(event.target.value as "paddleocr_opencv" | "heuristic" | "florence2" | "hybrid")}
+              onChange={(event) => setDetectorMode(event.target.value as "paddleocr_opencv" | "heuristic" | "florence2" | "hybrid" | "pdf_worker")}
             >
               <option value="florence2">3 - Florence-2</option>
               <option value="paddleocr_opencv">2 - PaddleOCR + OpenCV</option>
               <option value="heuristic">1 - Heuristic</option>
               <option value="hybrid">4 - Hybrid</option>
+              <option value="pdf_worker">5 - PyMuPDF (PDF Worker)</option>
             </select>
           </div>
 
