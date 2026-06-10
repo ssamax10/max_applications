@@ -1,5 +1,5 @@
 global:
-  imageTag: v0.9.3
+  imageTag: v0.9.4
   imagePullPolicy: IfNotPresent
 
 auth:
@@ -21,7 +21,7 @@ services:
   frontend:
     replicas: 3
     image:
-      tag: v0.9.3
+      tag: v0.9.4
       pullPolicy: Always
     env:
       VITE_OIDC_ISSUER: https://apps.maxautocables.com/application/o/openballoon-maxauto/
@@ -46,7 +46,7 @@ services:
   pdf-worker-service:
     replicas: 3
     image:
-      tag: v0.9.3
+      tag: v0.9.4
       pullPolicy: Always
   postgres:
     replicas: 1
