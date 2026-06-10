@@ -81,6 +81,21 @@ const servicePorts = {
 };
 
 function serviceBase(port: number): string {
+  const configuredBaseByPort: Record<number, string | undefined> = {
+    [servicePorts.drawing]: import.meta.env.VITE_DRAWING_API_BASE,
+    [servicePorts.geometry]: import.meta.env.VITE_GEOMETRY_API_BASE,
+    [servicePorts.balloon]: import.meta.env.VITE_BALLOON_API_BASE,
+    [servicePorts.ai]: import.meta.env.VITE_AI_API_BASE,
+    [servicePorts.mcp]: import.meta.env.VITE_MCP_API_BASE,
+    [servicePorts.revision]: import.meta.env.VITE_REVISION_API_BASE,
+    [servicePorts.dwg]: import.meta.env.VITE_DWG_TRANSLATION_API_BASE,
+  };
+
+  const configuredBase = configuredBaseByPort[port]?.trim();
+  if (configuredBase) {
+    return configuredBase.replace(/\/+$/u, "");
+  }
+
   const protocol = window.location.protocol;
   const hostname = window.location.hostname || "localhost";
   return `${protocol}//${hostname}:${port}`;

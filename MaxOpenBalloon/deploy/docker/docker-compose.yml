@@ -31,6 +31,12 @@ services:
       dockerfile: Dockerfile
     environment:
       VITE_DRAWING_API_BASE: ${VITE_DRAWING_API_BASE:-http://localhost:18001}
+      VITE_GEOMETRY_API_BASE: ${VITE_GEOMETRY_API_BASE:-http://localhost:18002}
+      VITE_BALLOON_API_BASE: ${VITE_BALLOON_API_BASE:-http://localhost:18003}
+      VITE_AI_API_BASE: ${VITE_AI_API_BASE:-http://localhost:18004}
+      VITE_MCP_API_BASE: ${VITE_MCP_API_BASE:-http://localhost:18005}
+      VITE_REVISION_API_BASE: ${VITE_REVISION_API_BASE:-http://localhost:18006}
+      VITE_DWG_TRANSLATION_API_BASE: ${VITE_DWG_TRANSLATION_API_BASE:-http://localhost:18007}
       VITE_OIDC_ISSUER: ${VITE_OIDC_ISSUER:-${OIDC_ISSUER:-https://auth.edge.example.com/application/o/maxopenballoon/}}
       VITE_OIDC_CLIENT_ID: ${VITE_OIDC_CLIENT_ID:-maxopenballoon-frontend}
       VITE_OIDC_REDIRECT_URI: ${VITE_OIDC_REDIRECT_URI:-http://localhost:${FRONTEND_PORT:-5173}}

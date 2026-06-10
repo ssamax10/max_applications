@@ -24,6 +24,13 @@ services:
       tag: v0.9.4
       pullPolicy: Always
     env:
+      VITE_DRAWING_API_BASE: http://maxopenballoon-drawing-service:8000
+      VITE_GEOMETRY_API_BASE: http://maxopenballoon-geometry-service:8000
+      VITE_BALLOON_API_BASE: http://maxopenballoon-balloon-service:8000
+      VITE_AI_API_BASE: http://maxopenballoon-ai-service:8000
+      VITE_MCP_API_BASE: http://maxopenballoon-mcp-service:8000
+      VITE_REVISION_API_BASE: http://maxopenballoon-revision-service:8000
+      VITE_DWG_TRANSLATION_API_BASE: http://maxopenballoon-dwg-translation-service:8000
       VITE_OIDC_ISSUER: https://apps.maxautocables.com/application/o/openballoon-maxauto/
       VITE_OIDC_CLIENT_ID: pUDiYjGaIpKBnaFjlDhp3UfHum7gBj3dZghLHkCP
       VITE_OIDC_SCOPE: openid profile email
