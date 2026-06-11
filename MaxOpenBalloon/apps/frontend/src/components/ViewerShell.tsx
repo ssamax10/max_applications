@@ -144,10 +144,21 @@ function applyBalloonMoveGeometry(
   x: number,
   y: number,
 ): Record<string, unknown> {
+  const previousX = typeof geometry.x === "number" && Number.isFinite(geometry.x) ? geometry.x : x;
+  const previousY = typeof geometry.y === "number" && Number.isFinite(geometry.y) ? geometry.y : y;
+  const deltaX = x - previousX;
+  const deltaY = y - previousY;
+
   return {
     ...geometry,
     x: Math.round(x),
     y: Math.round(y),
+    leader_x: typeof geometry.leader_x === "number" && Number.isFinite(geometry.leader_x)
+      ? Math.round(geometry.leader_x + deltaX)
+      : geometry.leader_x,
+    leader_y: typeof geometry.leader_y === "number" && Number.isFinite(geometry.leader_y)
+      ? Math.round(geometry.leader_y + deltaY)
+      : geometry.leader_y,
   };
 }
 
@@ -179,7 +190,7 @@ export function ViewerShell() {
   const [editFontFamily, setEditFontFamily] = useState("Space Grotesk");
   const [viewerMode, setViewerMode] = useState<"libracad" | "annotation">("annotation");
   const [placeModeEnabled, setPlaceModeEnabled] = useState(false);
-  const [snapToGridEnabled, setSnapToGridEnabled] = useState(true);
+  const [snapToGridEnabled, setSnapToGridEnabled] = useState(false);
   const [gridSizeInput, setGridSizeInput] = useState("10");
   const [lastCanvasAction, setLastCanvasAction] = useState<LastCanvasAction | null>(null);
   const [svgJob, setSvgJob] = useState<TranslationJob | null>(null);
@@ -576,11 +587,15 @@ export function ViewerShell() {
 
     setError(null);
     try {
+      const nextX = Number(editX);
+      const nextY = Number(editY);
+      const updatedGeometry = applyBalloonMoveGeometry(selectedBalloon.geometry, nextX, nextY);
       const updated = await updateBalloon(session, selectedBalloon.id, {
         label: editLabel,
         geometry: {
-          x: Number(editX),
-          y: Number(editY),
+          ...updatedGeometry,
+          x: updatedGeometry.x,
+          y: updatedGeometry.y,
           size: Number(editSize),
           fill_color: editNoFill ? "transparent" : editFillColor,
           outline_color: editOutlineColor,

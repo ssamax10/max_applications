@@ -322,11 +322,12 @@ export async function autoBalloon(
       continue;
     }
 
-    const leaderLength = 22;
+    const placementAngle = ((Math.abs(Math.round((detectedX * 13) + (detectedY * 7) + (index * 17))) % 360) * Math.PI) / 180;
+    const placementDistance = 28 + ((index % 3) * 8) + Math.max(0, Math.min(10, (suggestion.geometry.size ?? 18) / 4));
     const geometry = {
       ...suggestion.geometry,
-      x: detectedX + leaderLength,
-      y: detectedY - leaderLength,
+      x: Math.round(detectedX + Math.cos(placementAngle) * placementDistance),
+      y: Math.round(detectedY + Math.sin(placementAngle) * placementDistance),
       leader_x: detectedX,
       leader_y: detectedY,
       size: typeof suggestion.geometry.size === "number" && suggestion.geometry.size > 0
