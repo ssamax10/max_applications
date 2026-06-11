@@ -21,7 +21,7 @@ services:
   frontend:
     replicas: 3
     image:
-      tag: v0.9.4
+      tag: v0.9.5
       pullPolicy: Always
     env:
       VITE_DRAWING_API_BASE: http://maxopenballoon-drawing-service:8000
