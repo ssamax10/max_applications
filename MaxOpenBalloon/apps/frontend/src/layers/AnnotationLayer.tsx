@@ -148,11 +148,12 @@ export function AnnotationLayer({
           const loadingTask = getDocument(layerUrl);
           const pdfDocument = await loadingTask.promise;
           const page = await pdfDocument.getPage(1);
-          // nativeViewport at scale=1 gives dimensions in PDF points — same coordinate space as the detector.
-          const nativeViewport = page.getViewport({ scale: 1 });
+          // Force rotation=0 so display coordinates match detector coordinates.
+          // Some PDF viewers auto-apply page rotation metadata while detectors return raw page-space points.
+          const nativeViewport = page.getViewport({ scale: 1, rotation: 0 });
           // Render at higher scale for visual quality but map coordinates using PDF-point dimensions.
           const renderScale = 1.5;
-          const viewport = page.getViewport({ scale: renderScale });
+          const viewport = page.getViewport({ scale: renderScale, rotation: 0 });
 
           const canvas = document.createElement("canvas");
           canvas.width = Math.ceil(viewport.width);

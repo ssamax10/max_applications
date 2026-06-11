@@ -847,7 +847,7 @@ def _detector_plan(requested_mode: str | None, source_format: str) -> list[str]:
                 raise HTTPException(status_code=400, detail='florence2 detector requested but FLORENCE2_ENDPOINT is not configured')
             return ['florence2', 'pdf_worker', 'dxf_vector', 'paddleocr_opencv']
         if requested_mode == 'pdf_worker':
-            plan = ['pdf_worker', 'paddleocr_opencv', 'florence2', 'heuristic']
+            plan = ['pdf_worker', 'paddleocr_opencv', 'florence2']
             return [detector for detector in plan if detector != 'florence2' or _is_florence_configured()]
         if requested_mode == 'heuristic':
             return ['heuristic']
@@ -953,6 +953,15 @@ def suggest_balloons(
         detector_diagnostics[detector] = _empty_detector_reason(detector)
 
     if not suggestions:
+        if request.detector_mode and request.detector_mode != 'heuristic':
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"No suggestions generated for requested detector_mode '{request.detector_mode}'. "
+                    f"Diagnostics: {detector_diagnostics}"
+                ),
+            )
+
         fallback_budget = max(1, min(suggestion_budget, 12))
         suggestions = _refine_suggestions('heuristic', _heuristic_suggestions(fallback_budget), fallback_budget)
         if suggestions:
