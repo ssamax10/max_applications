@@ -176,7 +176,7 @@ export function ViewerShell() {
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<ServiceResult | null>(null);
   const [aiSuggestionCount, setAiSuggestionCount] = useState(0);
-  const [detectorMode, setDetectorMode] = useState<"paddleocr_opencv" | "heuristic" | "florence2" | "hybrid" | "pdf_worker">("paddleocr_opencv");
+  const [detectorMode, setDetectorMode] = useState<"paddleocr_opencv" | "heuristic" | "florence2" | "hybrid" | "pdf_worker">("pdf_worker");
   const [lastDetectorUsed, setLastDetectorUsed] = useState<string | null>(null);
   const [lastAttemptedDetectors, setLastAttemptedDetectors] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -1109,11 +1109,11 @@ export function ViewerShell() {
               value={detectorMode}
               onChange={(event) => setDetectorMode(event.target.value as "paddleocr_opencv" | "heuristic" | "florence2" | "hybrid" | "pdf_worker")}
             >
-              <option value="florence2">3 - Florence-2</option>
+              <option value="pdf_worker">1 - PyMuPDF (PDF Worker)</option>
               <option value="paddleocr_opencv">2 - PaddleOCR + OpenCV</option>
-              <option value="heuristic">1 - Heuristic</option>
+              <option value="florence2">3 - Florence-2</option>
               <option value="hybrid">4 - Hybrid</option>
-              <option value="pdf_worker">5 - PyMuPDF (PDF Worker)</option>
+              <option value="heuristic">5 - Heuristic</option>
             </select>
           </div>
 

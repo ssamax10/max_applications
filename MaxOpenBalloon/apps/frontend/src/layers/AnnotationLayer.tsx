@@ -481,6 +481,12 @@ export function AnnotationLayer({
                   strokeWidth={3}
                   opacity={0.95}
                 />
+                <Line
+                  points={[0, 0, Math.max(18, balloon.size / 2 + 6), -9]}
+                  stroke={balloon.textColor}
+                  strokeWidth={1.5}
+                  opacity={0.7}
+                />
                 <Text
                   x={Math.max(18, balloon.size / 2 + 6)}
                   y={-9}
@@ -489,6 +495,10 @@ export function AnnotationLayer({
                   fontSize={Math.max(12, Math.round(balloon.size / 2.2))}
                   fontStyle="bold"
                   fontFamily={balloon.fontFamily}
+                  align="center"
+                  verticalAlign="middle"
+                  offsetX={Math.max(6, Math.round((balloon.size / 2.2) / 2))}
+                  offsetY={Math.max(6, Math.round((balloon.size / 2.2) / 2))}
                 />
               </Group>,
             ];
