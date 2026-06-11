@@ -148,7 +148,11 @@ export function AnnotationLayer({
           const loadingTask = getDocument(layerUrl);
           const pdfDocument = await loadingTask.promise;
           const page = await pdfDocument.getPage(1);
-          const viewport = page.getViewport({ scale: 1.5 });
+          // nativeViewport at scale=1 gives dimensions in PDF points — same coordinate space as the detector.
+          const nativeViewport = page.getViewport({ scale: 1 });
+          // Render at higher scale for visual quality but map coordinates using PDF-point dimensions.
+          const renderScale = 1.5;
+          const viewport = page.getViewport({ scale: renderScale });
 
           const canvas = document.createElement("canvas");
           canvas.width = Math.ceil(viewport.width);
@@ -164,7 +168,9 @@ export function AnnotationLayer({
           image.onload = () => {
             if (!cancelled) {
               setDrawingLayerImage(image);
-              setDrawingLayerDimensions({ width: canvas.width, height: canvas.height });
+              // Store the PDF point dimensions (scale=1), NOT the rendered pixel size.
+              // This ensures toCanvasPoint maps detector coordinates (in PDF points) correctly.
+              setDrawingLayerDimensions({ width: nativeViewport.width, height: nativeViewport.height });
             }
           };
           image.onerror = () => {
