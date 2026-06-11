@@ -325,8 +325,14 @@ export async function autoBalloon(
     const suggestedSize = typeof suggestion.geometry.size === "number" && suggestion.geometry.size > 0
       ? suggestion.geometry.size
       : 18 + (index % 2) * 2;
-    const placementAngle = ((Math.abs(Math.round((detectedX * 11) + (detectedY * 5) + (index * 23))) % 360) * Math.PI) / 180;
-    const placementDistance = Math.max(12, (suggestedSize / 2) + 6);
+    // Use 4-position compass (NE/NW/SE/SW) based on position hash so balloons fan out
+    // around their dimension anchors rather than piling on top of each other.
+    const compassSlot = Math.abs(Math.round((detectedX * 11) + (detectedY * 5) + (index * 23))) % 4;
+    const compassAngles = [45, 135, 225, 315]; // NE, NW, SW, SE in degrees
+    const placementAngle = (compassAngles[compassSlot] * Math.PI) / 180;
+    // Use a generous distance (PDF points) so the leader line is always clearly visible
+    // even for large-format drawings where drawingScale < 1.
+    const placementDistance = Math.max(40, suggestedSize * 2);
     const geometry = {
       ...suggestion.geometry,
       x: Math.round(detectedX + Math.cos(placementAngle) * placementDistance),

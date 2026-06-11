@@ -508,7 +508,7 @@ export function AnnotationLayer({
                   strokeWidth={3}
                   opacity={0.95}
                 />
-                {hasLeader && leaderDistance > radius
+                {hasLeader && leaderDistance > 2
                   ? (
                     <Line
                       points={[leaderStartX, leaderStartY, leaderDx, leaderDy]}
