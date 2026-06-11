@@ -847,7 +847,7 @@ def _detector_plan(requested_mode: str | None, source_format: str) -> list[str]:
                 raise HTTPException(status_code=400, detail='florence2 detector requested but FLORENCE2_ENDPOINT is not configured')
             return ['florence2', 'pdf_worker', 'dxf_vector', 'paddleocr_opencv']
         if requested_mode == 'pdf_worker':
-            plan = ['pdf_worker', 'florence2', 'hybrid', 'heuristic']
+            plan = ['pdf_worker', 'paddleocr_opencv', 'florence2', 'heuristic']
             return [detector for detector in plan if detector != 'florence2' or _is_florence_configured()]
         if requested_mode == 'heuristic':
             return ['heuristic']

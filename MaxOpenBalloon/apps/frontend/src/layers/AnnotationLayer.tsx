@@ -54,6 +54,8 @@ type AnnotationLayerProps = {
     label: string;
     x: number;
     y: number;
+    leaderX?: number | null;
+    leaderY?: number | null;
     fillColor: string;
     outlineColor: string;
     size: number;
@@ -63,6 +65,7 @@ type AnnotationLayerProps = {
   selectedBalloonId: string | null;
   onCanvasClick?: (point: { x: number; y: number }) => void;
   onSelectBalloon?: (balloonId: string) => void;
+  onDeselectBalloon?: () => void;
   onMoveBalloon?: (payload: { id: string; x: number; y: number }) => void;
   drawingLayerUrl?: string | null;
   drawingLayerFormat?: "SVG" | "PDF" | "DWG" | "DXF" | null;
@@ -77,6 +80,7 @@ export function AnnotationLayer({
   selectedBalloonId,
   onCanvasClick,
   onSelectBalloon,
+  onDeselectBalloon,
   onMoveBalloon,
   drawingLayerUrl,
   drawingLayerFormat,
@@ -391,7 +395,15 @@ export function AnnotationLayer({
           applyZoom(zoomScale * zoomDirection, pointer);
         }}
       >
-        <Layer>
+        <Layer
+          onMouseDown={(event) => {
+            const target = event.target;
+            const balloonNode = target.findAncestor(".balloon-layer", true);
+            if (!balloonNode) {
+              onDeselectBalloon?.();
+            }
+          }}
+        >
           <Rect
             name="background-canvas"
             x={0}
@@ -457,6 +469,15 @@ export function AnnotationLayer({
           {balloons.flatMap((balloon) => {
             const selected = balloon.id === selectedBalloonId;
             const canvasPoint = toCanvasPoint({ x: balloon.x, y: balloon.y });
+            const hasLeader = typeof balloon.leaderX === "number" && Number.isFinite(balloon.leaderX)
+              && typeof balloon.leaderY === "number" && Number.isFinite(balloon.leaderY);
+            const leaderCanvasPoint = hasLeader ? toCanvasPoint({ x: balloon.leaderX as number, y: balloon.leaderY as number }) : null;
+            const leaderDx = leaderCanvasPoint ? leaderCanvasPoint.x - canvasPoint.x : 0;
+            const leaderDy = leaderCanvasPoint ? leaderCanvasPoint.y - canvasPoint.y : 0;
+            const leaderDistance = Math.hypot(leaderDx, leaderDy);
+            const radius = Math.max(8, balloon.size / 2);
+            const leaderStartX = hasLeader && leaderDistance > 0 ? (leaderDx / leaderDistance) * radius : 0;
+            const leaderStartY = hasLeader && leaderDistance > 0 ? (leaderDy / leaderDistance) * radius : 0;
             return [
               <Group
                 name="balloon-layer"
@@ -475,17 +496,27 @@ export function AnnotationLayer({
                 }}
               >
                 <Circle
-                  radius={Math.max(8, balloon.size / 2)}
+                  radius={radius}
                   fill={balloon.fillColor}
                   stroke={selected ? "#ffffff" : balloon.outlineColor}
                   strokeWidth={3}
                   opacity={0.95}
                 />
+                {hasLeader && leaderDistance > radius
+                  ? (
+                    <Line
+                      points={[leaderStartX, leaderStartY, leaderDx, leaderDy]}
+                      stroke={balloon.outlineColor}
+                      strokeWidth={1.5}
+                      opacity={0.9}
+                    />
+                  )
+                  : null}
                 <Text
                   x={0}
                   y={0}
                   text={balloon.label}
-                  fill={balloon.textColor}
+                  fill="#000000"
                   fontSize={Math.max(12, Math.round(balloon.size / 2.2))}
                   fontStyle="bold"
                   fontFamily={balloon.fontFamily}
@@ -493,12 +524,6 @@ export function AnnotationLayer({
                   verticalAlign="middle"
                   offsetX={Math.max(6, Math.round((balloon.size / 2.2) * 0.55))}
                   offsetY={Math.max(6, Math.round((balloon.size / 2.2) * 0.55))}
-                />
-                <Line
-                  points={[0, 0, Math.max(18, balloon.size / 2 + 12), Math.max(18, balloon.size / 2 + 12)]}
-                  stroke={balloon.textColor}
-                  strokeWidth={1.5}
-                  opacity={0.6}
                 />
               </Group>,
             ];

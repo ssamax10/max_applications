@@ -312,10 +312,23 @@ export async function autoBalloon(
 
   for (let index = 0; index < ai.suggestions.length; index += 1) {
     const suggestion = ai.suggestions[index];
+    const rawX = suggestion.geometry.x;
+    const rawY = suggestion.geometry.y;
+    const detectedX = typeof rawX === "number" ? rawX : (typeof rawX === "string" ? parseFloat(rawX) : Number.NaN);
+    const detectedY = typeof rawY === "number" ? rawY : (typeof rawY === "string" ? parseFloat(rawY) : Number.NaN);
+
+    if (!Number.isFinite(detectedX) || !Number.isFinite(detectedY)) {
+      // Skip malformed suggestions instead of synthesizing matrix/grid coordinates.
+      continue;
+    }
+
+    const leaderLength = 22;
     const geometry = {
       ...suggestion.geometry,
-       x: typeof suggestion.geometry.x === "number" ? suggestion.geometry.x : (typeof suggestion.geometry.x === "string" ? parseFloat(suggestion.geometry.x) : 120 + index * 18),
-       y: typeof suggestion.geometry.y === "number" ? suggestion.geometry.y : (typeof suggestion.geometry.y === "string" ? parseFloat(suggestion.geometry.y) : 120 + index * 16),
+      x: detectedX + leaderLength,
+      y: detectedY - leaderLength,
+      leader_x: detectedX,
+      leader_y: detectedY,
       size: typeof suggestion.geometry.size === "number" && suggestion.geometry.size > 0
         ? suggestion.geometry.size
         : 18 + (index % 2) * 2,
@@ -329,9 +342,7 @@ export async function autoBalloon(
       outline_color: typeof suggestion.geometry.outline_color === "string" && suggestion.geometry.outline_color
         ? suggestion.geometry.outline_color
         : outlinePalette[index % outlinePalette.length],
-      text_color: typeof suggestion.geometry.text_color === "string" && suggestion.geometry.text_color
-        ? suggestion.geometry.text_color
-        : "#fff4d8",
+      text_color: "#000000",
       font_family: typeof suggestion.geometry.font_family === "string" && suggestion.geometry.font_family
         ? suggestion.geometry.font_family
         : "Space Grotesk",
@@ -350,9 +361,13 @@ export async function autoBalloon(
     balloons.push(created);
   }
 
+  if (balloons.length === 0) {
+    throw new Error("No valid AI suggestions with coordinates were generated");
+  }
+
   return {
     balloons,
-    suggestions: ai.suggestions.length,
+    suggestions: balloons.length,
     detectorUsed: ai.detector_used ?? "unknown",
     attemptedDetectors: ai.attempted_detectors ?? [],
     detectorDiagnostics: ai.detector_diagnostics ?? {},

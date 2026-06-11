@@ -65,16 +65,28 @@ function inferSourceFormat(fileName: string): DrawingFormat {
 
 function geometryNumber(geometry: Record<string, unknown>, key: "x" | "y", fallback: number): number {
   const value = geometry[key];
-   if (typeof value === "number" && Number.isFinite(value)) {
-     return value;
-   }
-   if (typeof value === "string") {
-     const parsed = parseFloat(value);
-     if (Number.isFinite(parsed)) {
-       return parsed;
-     }
-   }
-   return fallback;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
+}
+
+function geometryOptionalNumber(geometry: Record<string, unknown>, key: string): number | null {
+  const value = geometry[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function geometryFillColor(geometry: Record<string, unknown>, fallback = "transparent"): string {
@@ -807,16 +819,18 @@ export function ViewerShell() {
     }
   }
 
-  const canvasBalloons = balloons.map((item, index) => {
+  const canvasBalloons = balloons.map((item) => {
     return {
       id: item.id,
       label: item.label,
       x: geometryNumber(item.geometry, "x", 0),
       y: geometryNumber(item.geometry, "y", 0),
+      leaderX: geometryOptionalNumber(item.geometry, "leader_x"),
+      leaderY: geometryOptionalNumber(item.geometry, "leader_y"),
       fillColor: geometryFillColor(item.geometry),
       outlineColor: geometryOutlineColor(item.geometry),
       size: geometrySize(item.geometry),
-      textColor: geometryTextColor(item.geometry),
+      textColor: "#000000",
       fontFamily: geometryFontFamily(item.geometry),
     };
   });
@@ -1390,6 +1404,9 @@ export function ViewerShell() {
                 exportPreviewOnly={exportPreviewOnly}
                 onSelectBalloon={(balloonId) => {
                   selectBalloon(balloonId);
+                }}
+                onDeselectBalloon={() => {
+                  setSelectedBalloonId(null);
                 }}
                 onMoveBalloon={(payload) => {
                   void moveBalloonOnCanvas(payload.id, payload.x, payload.y);
