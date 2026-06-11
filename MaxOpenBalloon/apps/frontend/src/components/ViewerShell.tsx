@@ -65,7 +65,16 @@ function inferSourceFormat(fileName: string): DrawingFormat {
 
 function geometryNumber(geometry: Record<string, unknown>, key: "x" | "y", fallback: number): number {
   const value = geometry[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+   if (typeof value === "number" && Number.isFinite(value)) {
+     return value;
+   }
+   if (typeof value === "string") {
+     const parsed = parseFloat(value);
+     if (Number.isFinite(parsed)) {
+       return parsed;
+     }
+   }
+   return fallback;
 }
 
 function geometryFillColor(geometry: Record<string, unknown>, fallback = "transparent"): string {
@@ -799,14 +808,11 @@ export function ViewerShell() {
   }
 
   const canvasBalloons = balloons.map((item, index) => {
-    const fallbackX = 80 + ((index % 10) * 92);
-    const fallbackY = 90 + (Math.floor(index / 10) * 64);
-
     return {
       id: item.id,
       label: item.label,
-      x: geometryNumber(item.geometry, "x", fallbackX),
-      y: geometryNumber(item.geometry, "y", fallbackY),
+      x: geometryNumber(item.geometry, "x", 0),
+      y: geometryNumber(item.geometry, "y", 0),
       fillColor: geometryFillColor(item.geometry),
       outlineColor: geometryOutlineColor(item.geometry),
       size: geometrySize(item.geometry),

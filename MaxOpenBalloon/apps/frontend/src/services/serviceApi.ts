@@ -314,6 +314,8 @@ export async function autoBalloon(
     const suggestion = ai.suggestions[index];
     const geometry = {
       ...suggestion.geometry,
+       x: typeof suggestion.geometry.x === "number" ? suggestion.geometry.x : (typeof suggestion.geometry.x === "string" ? parseFloat(suggestion.geometry.x) : 120 + index * 18),
+       y: typeof suggestion.geometry.y === "number" ? suggestion.geometry.y : (typeof suggestion.geometry.y === "string" ? parseFloat(suggestion.geometry.y) : 120 + index * 16),
       size: typeof suggestion.geometry.size === "number" && suggestion.geometry.size > 0
         ? suggestion.geometry.size
         : 18 + (index % 2) * 2,
