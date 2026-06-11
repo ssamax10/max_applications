@@ -458,6 +458,9 @@ export function ViewerShell() {
     try {
       const response = await autoBalloon(session, drawingId, 60, detectorMode);
       const created = response.balloons;
+      if (response.coordinateDebug.length > 0) {
+        console.table(response.coordinateDebug);
+      }
       setAiSuggestionCount(response.suggestions);
       setLastDetectorUsed(response.detectorUsed);
       setLastAttemptedDetectors(response.attemptedDetectors);

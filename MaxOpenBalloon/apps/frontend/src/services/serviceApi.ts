@@ -42,6 +42,19 @@ export type TranslationJob = {
   submitted_at: string;
 };
 
+export type AutoBalloonCoordinateDebug = {
+  label: string;
+  detected_x: number;
+  detected_y: number;
+  balloon_x: number;
+  balloon_y: number;
+  leader_x: number;
+  leader_y: number;
+  delta_x: number;
+  delta_y: number;
+  distance: number;
+};
+
 function resolveUploadPayload(input: unknown): { blob: Blob; filename: string } {
   if (input instanceof File) {
     return { blob: input, filename: input.name || "drawing-upload.bin" };
@@ -285,6 +298,7 @@ export async function autoBalloon(
   detectorUsed: string;
   attemptedDetectors: string[];
   detectorDiagnostics: Record<string, string>;
+  coordinateDebug: AutoBalloonCoordinateDebug[];
 }> {
   const ai = await requestJson<{
     suggestions: Array<{ label: string; geometry: Record<string, unknown> }>;
@@ -306,9 +320,22 @@ export async function autoBalloon(
     throw new Error("No AI suggestions generated");
   }
 
-  const palette = ["#ff8f3f", "#ef476f", "#ffd166", "#06d6a0", "#118ab2"];
   const outlinePalette = ["#d7651f", "#bf2d55", "#d3aa2f", "#049169", "#0f6a8a"];
   const balloons: BalloonRecord[] = [];
+  const coordinateDebug: AutoBalloonCoordinateDebug[] = [];
+
+  function geometryNumber(value: unknown, fallback: number): number {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string") {
+      const parsed = parseFloat(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return fallback;
+  }
 
   for (let index = 0; index < ai.suggestions.length; index += 1) {
     const suggestion = ai.suggestions[index];
@@ -330,9 +357,8 @@ export async function autoBalloon(
     const compassSlot = Math.abs(Math.round((detectedX * 11) + (detectedY * 5) + (index * 23))) % 4;
     const compassAngles = [45, 135, 225, 315]; // NE, NW, SW, SE in degrees
     const placementAngle = (compassAngles[compassSlot] * Math.PI) / 180;
-    // Use a generous distance (PDF points) so the leader line is always clearly visible
-    // even for large-format drawings where drawingScale < 1.
-    const placementDistance = Math.max(40, suggestedSize * 2);
+    // Keep callouts close to the detected dimension while retaining a visible leader.
+    const placementDistance = Math.max(14, (suggestedSize / 2) + 6);
     const geometry = {
       ...suggestion.geometry,
       x: Math.round(detectedX + Math.cos(placementAngle) * placementDistance),
@@ -366,6 +392,26 @@ export async function autoBalloon(
         geometry,
       },
     );
+
+    const balloonX = geometryNumber(created.geometry.x, geometryNumber(geometry.x, detectedX));
+    const balloonY = geometryNumber(created.geometry.y, geometryNumber(geometry.y, detectedY));
+    const leaderX = geometryNumber(created.geometry.leader_x, detectedX);
+    const leaderY = geometryNumber(created.geometry.leader_y, detectedY);
+    const deltaX = balloonX - detectedX;
+    const deltaY = balloonY - detectedY;
+    coordinateDebug.push({
+      label: suggestion.label || `AI-B-${String(index + 1).padStart(3, "0")}`,
+      detected_x: detectedX,
+      detected_y: detectedY,
+      balloon_x: balloonX,
+      balloon_y: balloonY,
+      leader_x: leaderX,
+      leader_y: leaderY,
+      delta_x: deltaX,
+      delta_y: deltaY,
+      distance: Math.hypot(deltaX, deltaY),
+    });
+
     balloons.push(created);
   }
 
@@ -379,6 +425,7 @@ export async function autoBalloon(
     detectorUsed: ai.detector_used ?? "unknown",
     attemptedDetectors: ai.attempted_detectors ?? [],
     detectorDiagnostics: ai.detector_diagnostics ?? {},
+    coordinateDebug,
   };
 }
 
