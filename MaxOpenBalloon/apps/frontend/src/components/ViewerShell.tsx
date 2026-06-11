@@ -363,39 +363,43 @@ export function ViewerShell() {
       if (detectedFormat === "DWG") {
         setIsConvertingPreview(true);
         setLoadStatus("Converting DWG to PDF with QCAD...");
-        let pdfStepError: string | null = null;
         try {
           const pdfJobResult = await convertDrawing(session, drawing.source_uri, "PDF");
           setPdfJob(pdfJobResult);
-        } catch (pdfPreviewError) {
-          pdfStepError = pdfPreviewError instanceof Error ? pdfPreviewError.message : "DWG PDF conversion failed";
-          setPdfJob(null);
-        }
-
-        setLoadStatus("Preparing DWG base preview as SVG...");
-        try {
-          const svgJobResult = await convertDrawing(session, drawing.source_uri, "SVG");
-          setSvgJob(svgJobResult);
-          const blobUrl = await resolveRemotePreviewUrl(svgJobResult.output_uri);
+          const blobUrl = await resolveRemotePreviewUrl(pdfJobResult.output_uri);
           setViewerAssetUrl((current) => {
             if (current && current.startsWith("blob:")) {
               URL.revokeObjectURL(current);
             }
             return blobUrl;
           });
-          setPreviewAssetFormat("SVG");
-          if (pdfStepError) {
-            setLoadStatus("DWG preview ready using LibreDWG SVG. QCAD PDF step failed.");
-          } else {
-            setLoadStatus("DWG preview ready with LibreDWG SVG base layer.");
+          setPreviewAssetFormat("PDF");
+          setSvgJob(null);
+          setLoadStatus("DWG preview ready with QCAD PDF base layer (aligned with detector coordinates).");
+        } catch (pdfPreviewError) {
+          const pdfError = pdfPreviewError instanceof Error ? pdfPreviewError.message : "DWG PDF conversion failed";
+          setPdfJob(null);
+          setLoadStatus("PDF preview failed. Preparing DWG base preview as SVG...");
+          try {
+            const svgJobResult = await convertDrawing(session, drawing.source_uri, "SVG");
+            setSvgJob(svgJobResult);
+            const blobUrl = await resolveRemotePreviewUrl(svgJobResult.output_uri);
+            setViewerAssetUrl((current) => {
+              if (current && current.startsWith("blob:")) {
+                URL.revokeObjectURL(current);
+              }
+              return blobUrl;
+            });
+            setPreviewAssetFormat("SVG");
+            setLoadStatus("DWG preview ready using SVG fallback (coordinate alignment may vary).");
+            setPreviewLoadError(`PDF-aligned preview unavailable: ${pdfError}`);
+          } catch (svgPreviewError) {
+            const svgError = svgPreviewError instanceof Error ? svgPreviewError.message : "DWG SVG preview failed";
+            setPreviewLoadError(`${pdfError}. SVG preview failed: ${svgError}`);
+            setViewerAssetUrl(null);
+            setPreviewAssetFormat(null);
+            setLoadStatus("Failed to prepare DWG preview.");
           }
-        } catch (svgPreviewError) {
-          const svgError = svgPreviewError instanceof Error ? svgPreviewError.message : "DWG SVG preview failed";
-          const detail = pdfStepError ? `${pdfStepError}. SVG preview failed: ${svgError}` : svgError;
-          setPreviewLoadError(detail);
-          setViewerAssetUrl(null);
-          setPreviewAssetFormat(null);
-          setLoadStatus("Failed to prepare DWG preview.");
         } finally {
           setIsConvertingPreview(false);
         }

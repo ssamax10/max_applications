@@ -322,17 +322,18 @@ export async function autoBalloon(
       continue;
     }
 
-    const placementAngle = ((Math.abs(Math.round((detectedX * 13) + (detectedY * 7) + (index * 17))) % 360) * Math.PI) / 180;
-    const placementDistance = 28 + ((index % 3) * 8) + Math.max(0, Math.min(10, (suggestion.geometry.size ?? 18) / 4));
+    const suggestedSize = typeof suggestion.geometry.size === "number" && suggestion.geometry.size > 0
+      ? suggestion.geometry.size
+      : 18 + (index % 2) * 2;
+    const placementAngle = ((Math.abs(Math.round((detectedX * 11) + (detectedY * 5) + (index * 23))) % 360) * Math.PI) / 180;
+    const placementDistance = Math.max(12, (suggestedSize / 2) + 6);
     const geometry = {
       ...suggestion.geometry,
       x: Math.round(detectedX + Math.cos(placementAngle) * placementDistance),
       y: Math.round(detectedY + Math.sin(placementAngle) * placementDistance),
       leader_x: detectedX,
       leader_y: detectedY,
-      size: typeof suggestion.geometry.size === "number" && suggestion.geometry.size > 0
-        ? suggestion.geometry.size
-        : 18 + (index % 2) * 2,
+      size: suggestedSize,
       fill_color: typeof suggestion.geometry.fill_color === "string" && suggestion.geometry.fill_color
         ? suggestion.geometry.fill_color
         : (
