@@ -105,32 +105,42 @@ async function discoverOidcMetadata(): Promise<OidcMetadata> {
 
   const issuer = envValue("issuer");
   if (!issuer) {
-    throw new Error(
-      "Missing VITE_OIDC_ISSUER. Set issuer or set VITE_OIDC_AUTHORIZATION_ENDPOINT and VITE_OIDC_TOKEN_ENDPOINT.",
-    );
+    // Local development mode - auth disabled
+    console.warn("OIDC issuer not configured. Running in local development mode without authentication.");
+    return {
+      authorization_endpoint: "http://localhost:19000/application/o/maxopenballoon/authorize",
+      token_endpoint: "http://localhost:19000/application/o/maxopenballoon/token",
+    };
   }
 
   const discoveryUrl = `${ensureIssuerBase(issuer)}.well-known/openid-configuration`;
-  const response = await fetch(discoveryUrl, {
-    method: "GET",
-    mode: "cors",
-  });
-  if (!response.ok) {
+  try {
+    const response = await fetch(discoveryUrl, {
+      method: "GET",
+      mode: "cors",
+    });
+    if (!response.ok) {
+      throw new Error(
+        `OIDC discovery failed at ${discoveryUrl}: ${response.status} ${response.statusText}. `
+        + "If your Authentik issuer URL differs, configure explicit VITE_OIDC_AUTHORIZATION_ENDPOINT and VITE_OIDC_TOKEN_ENDPOINT.",
+      );
+    }
+
+    const metadata = (await response.json()) as Partial<OidcMetadata>;
+    if (!metadata.authorization_endpoint || !metadata.token_endpoint) {
+      throw new Error("OIDC discovery response missing authorization/token endpoints.");
+    }
+
+    return {
+      authorization_endpoint: metadata.authorization_endpoint,
+      token_endpoint: metadata.token_endpoint,
+    };
+  } catch (error) {
+    console.error("OIDC discovery failed:", error);
     throw new Error(
-      `OIDC discovery failed at ${discoveryUrl}: ${response.status} ${response.statusText}. `
-      + "If your Authentik issuer URL differs, configure explicit VITE_OIDC_AUTHORIZATION_ENDPOINT and VITE_OIDC_TOKEN_ENDPOINT.",
+      `OIDC discovery failed. If running locally without auth, leave VITE_OIDC_ISSUER empty. Error: ${error}`,
     );
   }
-
-  const metadata = (await response.json()) as Partial<OidcMetadata>;
-  if (!metadata.authorization_endpoint || !metadata.token_endpoint) {
-    throw new Error("OIDC discovery response missing authorization/token endpoints.");
-  }
-
-  return {
-    authorization_endpoint: metadata.authorization_endpoint,
-    token_endpoint: metadata.token_endpoint,
-  };
 }
 
 function parseJwtPayload(token: string): Record<string, unknown> {

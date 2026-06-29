@@ -7,6 +7,17 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from app.core.settings import settings
+from app.core.vector_extractor import VectorExtractor
+from app.core.optimized_vector_extractor import OptimizedVectorExtractor
+from app.core.dimension_reconstructor import DimensionReconstructor
+from app.core.gdt_recognizer import GDTRecognizer
+from app.core.feature_associator import FeatureAssociator
+from app.core.inspection_extractor import InspectionExtractor
+from app.domain.vector_models import DrawingDocument
+from app.domain.dimension_models import DimensionGroup, DimensionGraph
+from app.domain.gdt_models import GDTRecognitionResult
+from app.domain.feature_models import FeatureAssociationResult
+from app.domain.inspection_models import InspectionResult
 
 router = APIRouter()
 
@@ -36,6 +47,52 @@ class ExtractResponse(BaseModel):
     profile: dict[str, Any]
     diagnostics: dict[str, str]
     suggestions: list[ExtractSuggestion]
+
+
+class VectorExtractResponse(BaseModel):
+    document_id: str
+    page_count: int
+    page_width: float
+    page_height: float
+    statistics: dict[str, Any]  # Allow int, str, bool values
+    text_blocks: list[dict[str, Any]]
+    lines: list[dict[str, Any]]
+    polylines: list[dict[str, Any]]
+    bezier_curves: list[dict[str, Any]]
+    annotations: list[dict[str, Any]]
+
+
+class DimensionReconstructResponse(BaseModel):
+    document_id: str
+    dimension_groups: list[dict[str, Any]]
+    graph: dict[str, Any]
+    statistics: dict[str, int]
+
+
+class GDTRecognitionResponse(BaseModel):
+    document_id: str
+    datum_symbols: list[dict[str, Any]]
+    gdt_tolerances: list[dict[str, Any]]
+    gdt_symbols: list[dict[str, Any]]
+    gdt_sets: list[dict[str, Any]]
+    statistics: dict[str, int]
+
+
+class FeatureAssociationResponse(BaseModel):
+    document_id: str
+    holes: list[dict[str, Any]]
+    slots: list[dict[str, Any]]
+    chamfers: list[dict[str, Any]]
+    radii: list[dict[str, Any]]
+    threads: list[dict[str, Any]]
+    associations: list[dict[str, Any]]
+    statistics: dict[str, int]
+
+
+class InspectionExtractResponse(BaseModel):
+    document_id: str
+    characteristics: list[dict[str, Any]]
+    statistics: dict[str, int]
 
 
 def _is_title_or_margin_zone(x0: float, y0: float, x1: float, y1: float, width: float, height: float) -> bool:
@@ -207,9 +264,289 @@ def _get_ocr_engine():
     return _PADDLE_OCR
 
 
+# Use optimized extractor with caching and smart detection
+_optimized_extractor = OptimizedVectorExtractor(use_pdfminer=False, cache_size=100)
+
+# Stage 2: Dimension reconstructor
+_dimension_reconstructor = DimensionReconstructor()
+
+# Stage 3: GD&T recognizer
+_gdt_recognizer = GDTRecognizer()
+
+# Stage 4: Feature associator
+_feature_associator = FeatureAssociator()
+
+# Stage 5: Inspection extractor
+_inspection_extractor = InspectionExtractor()
+
+
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": settings.service_name}
+
+
+@router.post("/vector/extract", response_model=VectorExtractResponse)
+async def extract_vector(
+    request: Request,
+    use_cache: bool = Query(default=True, description="Enable caching for repeated PDFs"),
+    extract_text: bool = Query(default=True, description="Extract text blocks"),
+    extract_lines: bool = Query(default=True, description="Extract lines"),
+    extract_polylines: bool = Query(default=True, description="Extract polylines"),
+    extract_curves: bool = Query(default=False, description="Extract Bezier curves (expensive)"),
+    extract_annotations: bool = Query(default=False, description="Extract annotations"),
+    max_primitives: int | None = Query(default=None, ge=100, le=50000, description="Limit total primitives"),
+) -> VectorExtractResponse:
+    """Stage 1: Extract complete vector geometry from PDF.
+    
+    Returns all primitives: text, lines, polylines, Bezier curves, annotations.
+    
+    Features:
+    - Smart PDF type detection (vector vs scanned)
+    - Caching for repeated access
+    - Selective extraction to reduce response size
+    - Automatic complexity limiting
+    """
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty PDF payload")
+
+    if len(payload) > settings.max_pdf_bytes:
+        raise HTTPException(status_code=413, detail="PDF payload exceeds configured size limit")
+
+    try:
+        # Build selective extraction config
+        selective = None
+        if not all([extract_text, extract_lines, extract_polylines, extract_curves, extract_annotations]):
+            selective = {
+                "extract_text": extract_text,
+                "extract_lines": extract_lines,
+                "extract_polylines": extract_polylines,
+                "extract_curves": extract_curves,
+                "extract_annotations": extract_annotations,
+            }
+        
+        # Extract with optimizations
+        drawing = _optimized_extractor.extract(
+            payload,
+            use_cache=use_cache,
+            selective=selective,
+            max_primitives=max_primitives,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Vector extraction failed: {exc}") from exc
+
+    stats = _optimized_extractor.get_statistics(drawing)
+
+    return VectorExtractResponse(
+        document_id=drawing.document_id,
+        page_count=drawing.page_count,
+        page_width=drawing.page_width,
+        page_height=drawing.page_height,
+        statistics=stats,
+        text_blocks=[tb.to_dict() for tb in drawing.text_blocks],
+        lines=[line.to_dict() for line in drawing.lines],
+        polylines=[pl.to_dict() for pl in drawing.polylines],
+        bezier_curves=[bc.to_dict() for bc in drawing.bezier_curves],
+        annotations=[ann.to_dict() for ann in drawing.annotations],
+    )
+
+
+@router.post("/dimensions/reconstruct", response_model=DimensionReconstructResponse)
+async def reconstruct_dimensions(
+    request: Request,
+) -> DimensionReconstructResponse:
+    """Stage 2: Reconstruct dimensions from vector geometry.
+    
+    Takes vector data and identifies:
+    - Arrowheads
+    - Extension lines
+    - Dimension lines
+    - Associated text
+    
+    Returns grouped dimensions with graph representation.
+    """
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty PDF payload")
+
+    if len(payload) > settings.max_pdf_bytes:
+        raise HTTPException(status_code=413, detail="PDF payload exceeds configured size limit")
+
+    try:
+        # Extract vector data first
+        drawing = _optimized_extractor.extract(payload, use_cache=True)
+        
+        # Reconstruct dimensions
+        dimension_groups, graph = _dimension_reconstructor.reconstruct(drawing)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Dimension reconstruction failed: {exc}") from exc
+
+    # Build statistics
+    stats = {
+        "total_dimensions": len(dimension_groups),
+        "total_arrowheads": len([
+            a for g in dimension_groups 
+            if g.dimension_line and g.dimension_line.start_arrow
+        ]),
+        "total_extension_lines": sum(len(g.extension_lines) for g in dimension_groups),
+        "graph_nodes": len(graph.nodes),
+        "graph_edges": len(graph.edges),
+    }
+
+    return DimensionReconstructResponse(
+        document_id=drawing.document_id,
+        dimension_groups=[dg.to_dict() for dg in dimension_groups],
+        graph=graph.to_dict(),
+        statistics=stats,
+    )
+
+
+@router.post("/gdt/recognize", response_model=GDTRecognitionResponse)
+async def recognize_gdt(
+    request: Request,
+) -> GDTRecognitionResponse:
+    """Stage 3: Recognize GD&T features from vector geometry.
+    
+    Identifies:
+    - Datum symbols (A, B, C, etc.)
+    - GD&T tolerances (position, profile, runout, flatness, etc.)
+    - GD&T symbol frames
+    - Complete GD&T sets with associations
+    
+    Returns recognized GD&T features with datum references.
+    """
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty PDF payload")
+
+    if len(payload) > settings.max_pdf_bytes:
+        raise HTTPException(status_code=413, detail="PDF payload exceeds configured size limit")
+
+    try:
+        # Extract vector data first
+        drawing = _optimized_extractor.extract(payload, use_cache=True)
+        
+        # Recognize GD&T features
+        gdt_result = _gdt_recognizer.recognize(drawing)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"GD&T recognition failed: {exc}") from exc
+
+    return GDTRecognitionResponse(
+        document_id=drawing.document_id,
+        datum_symbols=[ds.to_dict() for ds in gdt_result.datum_symbols],
+        gdt_tolerances=[gt.to_dict() for gt in gdt_result.gdt_tolerances],
+        gdt_symbols=[gs.to_dict() for gs in gdt_result.gdt_symbols],
+        gdt_sets=[gs.to_dict() for gs in gdt_result.gdt_sets],
+        statistics=gdt_result.statistics,
+    )
+
+
+@router.post("/features/associate", response_model=FeatureAssociationResponse)
+async def associate_features(
+    request: Request,
+) -> FeatureAssociationResponse:
+    """Stage 4: Detect and associate manufacturing features.
+    
+    Identifies:
+    - Holes (circular features)
+    - Slots (elongated holes)
+    - Chamfers (beveled edges)
+    - Radii (rounded corners)
+    - Threads (screw threads)
+    
+    Associates features with their dimensions.
+    """
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty PDF payload")
+
+    if len(payload) > settings.max_pdf_bytes:
+        raise HTTPException(status_code=413, detail="PDF payload exceeds configured size limit")
+
+    try:
+        # Extract vector data first
+        drawing = _optimized_extractor.extract(payload, use_cache=True)
+        
+        # Optionally get dimensions for association
+        dimension_groups, _ = _dimension_reconstructor.reconstruct(drawing)
+        
+        # Associate features
+        result = _feature_associator.associate(drawing, dimension_groups)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Feature association failed: {exc}") from exc
+
+    return FeatureAssociationResponse(
+        document_id=drawing.document_id,
+        holes=[h.to_dict() for h in result.holes],
+        slots=[s.to_dict() for s in result.slots],
+        chamfers=[c.to_dict() for c in result.chamfers],
+        radii=[r.to_dict() for r in result.radii],
+        threads=[t.to_dict() for t in result.threads],
+        associations=[a.to_dict() for a in result.associations],
+        statistics=result.statistics,
+    )
+
+
+@router.post("/inspection/extract", response_model=InspectionExtractResponse)
+async def extract_inspection(
+    request: Request,
+) -> InspectionExtractResponse:
+    """Stage 5: Extract complete inspection characteristics.
+    
+    Merges data from all previous stages to produce:
+    - Feature type (hole, slot, chamfer, radius, thread)
+    - Dimension (Ø12, 20, M8x1.25)
+    - Tolerance (±0.05, +0.0/-0.1)
+    - Datum references (A, B, C)
+    - GD&T type and value (position, profile, etc.)
+    
+    Returns structured inspection characteristics ready for quality control.
+    """
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty PDF payload")
+
+    if len(payload) > settings.max_pdf_bytes:
+        raise HTTPException(status_code=413, detail="PDF payload exceeds configured size limit")
+
+    try:
+        # Extract vector data first
+        drawing = _optimized_extractor.extract(payload, use_cache=True)
+        
+        # Get dimensions from Stage 2
+        dimension_groups, _ = _dimension_reconstructor.reconstruct(drawing)
+        
+        # Get GD&T from Stage 3
+        gdt_result = _gdt_recognizer.recognize(drawing)
+        
+        # Get features from Stage 4
+        feature_result = _feature_associator.associate(drawing, dimension_groups)
+        
+        # Extract inspection characteristics
+        inspection_result = _inspection_extractor.extract(
+            drawing,
+            dimension_groups,
+            gdt_result.gdt_sets,
+            feature_result
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Inspection extraction failed: {exc}") from exc
+
+    return InspectionExtractResponse(
+        document_id=drawing.document_id,
+        characteristics=[c.to_dict() for c in inspection_result.characteristics],
+        statistics=inspection_result.statistics,
+    )
 
 
 @router.post("/extract", response_model=ExtractResponse)

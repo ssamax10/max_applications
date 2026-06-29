@@ -2,7 +2,6 @@ import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
 
 import { AnnotationLayer } from "../layers/AnnotationLayer";
-import { BalloonOverlayLayer } from "../layers/BalloonOverlayLayer";
 import { LibraCadViewer } from "../layers/LibraCadViewer";
 import {
   autoBalloon,
@@ -13,25 +12,15 @@ import {
   runFeatureFlow,
   uploadDrawingFile,
   updateBalloon,
+  extractInspection,
   type BalloonRecord,
+  type InspectionCharacteristic,
+  type InspectionExtractionResult,
   type ServiceResult,
   type SessionContext,
   type TranslationJob,
 } from "../services/serviceApi";
 import { completeOidcLoginFromUrl, startOidcLogin } from "../services/oidcAuth";
-import { useViewerState } from "../state/viewerState";
-
-const serviceSequence = [
-  "Drawing",
-  "Balloon",
-  "Revision",
-  "Geometry",
-  "AI",
-  "DWG",
-  "MCP",
-] as const;
-
-type ServiceLabel = (typeof serviceSequence)[number];
 
 type LastCanvasAction =
   | {
@@ -163,7 +152,6 @@ function applyBalloonMoveGeometry(
 }
 
 export function ViewerShell() {
-  const { activeFormat } = useViewerState();
   const [tenantId, setTenantId] = useState("tenant-ui-001");
   const [session, setSession] = useState<SessionContext | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
@@ -185,9 +173,10 @@ export function ViewerShell() {
   const [editSize, setEditSize] = useState("18");
   const [editFillColor, setEditFillColor] = useState("#ffd7c2");
   const [editNoFill, setEditNoFill] = useState(true);
-  const [editOutlineColor, setEditOutlineColor] = useState("#d7651f");
-  const [editTextColor, setEditTextColor] = useState("#fff4d8");
+  const [editOutlineColor, setEditOutlineColor] = useState("#800000");
+  const [editTextColor, setEditTextColor] = useState("#ffffff");
   const [editFontFamily, setEditFontFamily] = useState("Space Grotesk");
+  const [balloonColor, setBalloonColor] = useState("#800000"); // Maroon
   const [viewerMode, setViewerMode] = useState<"libracad" | "annotation">("annotation");
   const [placeModeEnabled, setPlaceModeEnabled] = useState(false);
   const [snapToGridEnabled, setSnapToGridEnabled] = useState(false);
@@ -204,6 +193,44 @@ export function ViewerShell() {
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [exportPreviewOnly, setExportPreviewOnly] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
+  const [editRotation, setEditRotation] = useState(0);
+  const [toolbarPosition, setToolbarPosition] = useState<"top" | "bottom">("top");
+  const [isDraggingToolbar, setIsDraggingToolbar] = useState(false);
+  const [toolbarDragStartY, setToolbarDragStartY] = useState(0);
+
+  // Toolbar drag handlers
+  function handleToolbarDragStart(event: React.MouseEvent) {
+    event.preventDefault();
+    setIsDraggingToolbar(true);
+    setToolbarDragStartY(event.clientY);
+  }
+
+  useEffect(() => {
+    if (!isDraggingToolbar) {
+      return;
+    }
+
+    function handleMouseMove(event: MouseEvent) {
+      const viewportHeight = window.innerHeight;
+      const midpoint = viewportHeight / 2;
+      if (event.clientY < midpoint) {
+        setToolbarPosition("top");
+      } else {
+        setToolbarPosition("bottom");
+      }
+    }
+
+    function handleMouseUp() {
+      setIsDraggingToolbar(false);
+    }
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDraggingToolbar]);
 
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<ServiceResult | null>(null);
@@ -455,15 +482,79 @@ export function ViewerShell() {
 
     setError(null);
     setLoadStatus("Running Auto Balloon...");
+
     try {
-      const response = await autoBalloon(session, drawingId, 60, detectorMode);
-      const created = response.balloons;
-      if (response.coordinateDebug.length > 0) {
-        console.table(response.coordinateDebug);
+      // Try 5-stage inspection pipeline first (precise GD&T/dimension data)
+      const pdfBlob = selectedFile ?? (selectedFileUrl ? await fetch(selectedFileUrl).then(r => r.blob()) : null);
+      let created: BalloonRecord[] = [];
+      let usedDetector = "pdf_worker_5stage";
+      let attemptedDetectors = ["pdf_worker_5stage"];
+
+      if (pdfBlob) {
+        setLoadStatus("Stage 1-5: Extracting inspection characteristics...");
+        try {
+          const inspectionResult = await extractInspection(session, pdfBlob);
+
+          if (inspectionResult.characteristics.length > 0) {
+            setLoadStatus(`Creating ${inspectionResult.characteristics.length} balloons from inspection...`);
+
+            for (let index = 0; index < inspectionResult.characteristics.length; index++) {
+              const char = inspectionResult.characteristics[index];
+
+              const featureData = char.metadata?.feature_data as Record<string, unknown> | undefined;
+              const featureX = featureData?.center ? (featureData.center as { x: number }).x : 100 + (index * 50);
+              const featureY = featureData?.center ? (featureData.center as { y: number }).y : 100 + (index * 30);
+
+              const compassSlot = index % 4;
+              const compassAngles = [45, 135, 225, 315];
+              const placementAngle = (compassAngles[compassSlot] * Math.PI) / 180;
+              const placementDistance = 40;
+
+              const balloonX = Math.round(featureX + Math.cos(placementAngle) * placementDistance);
+              const balloonY = Math.round(featureY + Math.sin(placementAngle) * placementDistance);
+
+              const label = char.dimension ? `Ø${char.dimension}` : `F${char.characteristic}`;
+
+              const geometry: Record<string, unknown> = {
+                x: balloonX,
+                y: balloonY,
+                leader_x: featureX,
+                leader_y: featureY,
+                leader_type: "orthogonal",
+                size: 18,
+                fill_color: "transparent",
+                outline_color: balloonColor,
+                text_color: "#ffffff",
+                font_family: "Space Grotesk",
+              };
+
+              const createdBalloon = await createBalloon(session, drawingId, label, geometry);
+              created.push(createdBalloon);
+            }
+          }
+        } catch (inspectionError) {
+          // 5-stage pipeline failed, will fall through to AI service fallback
+          const msg = inspectionError instanceof Error ? inspectionError.message : "Inspection extraction failed";
+          setLoadStatus(`5-stage pipeline failed (${msg}), falling back to AI detector chain...`);
+        }
       }
-      setAiSuggestionCount(response.suggestions);
-      setLastDetectorUsed(response.detectorUsed);
-      setLastAttemptedDetectors(response.attemptedDetectors);
+
+      // Fallback: AI service detector chain with heuristic guarantee
+      if (created.length === 0) {
+        setLoadStatus("5-stage pipeline produced no results. Using AI detector chain with OCR fallback...");
+        usedDetector = "ai_service_fallback";
+        attemptedDetectors = ["pdf_worker_5stage", "ai_service_chain"];
+
+        const aiResult = await autoBalloon(session, drawingId, undefined, detectorMode);
+
+        for (const suggestion of aiResult.balloons) {
+          created.push(suggestion);
+        }
+
+        usedDetector = aiResult.detectorUsed;
+        attemptedDetectors = [...attemptedDetectors, ...aiResult.attemptedDetectors];
+      }
+
       setBalloons((current) => {
         const existing = new Map(current.map((entry) => [entry.id, entry]));
         created.forEach((entry) => {
@@ -472,6 +563,10 @@ export function ViewerShell() {
         return [...existing.values()];
       });
 
+      setAiSuggestionCount(created.length);
+      setLastDetectorUsed(usedDetector);
+      setLastAttemptedDetectors(attemptedDetectors);
+
       const first = created[0] ?? null;
       if (first) {
         setSelectedBalloonId(first.id);
@@ -479,14 +574,13 @@ export function ViewerShell() {
         setEditX(String(geometryNumber(first.geometry, "x", 24)));
         setEditY(String(geometryNumber(first.geometry, "y", 18)));
         setEditSize(String(geometrySize(first.geometry)));
-        const nextFill = geometryFillColor(first.geometry);
-        setEditFillColor(isTransparentFill(nextFill) ? "#ffd7c2" : nextFill);
-        setEditNoFill(isTransparentFill(nextFill));
-        setEditOutlineColor(geometryOutlineColor(first.geometry));
-        setEditTextColor(geometryTextColor(first.geometry));
-        setEditFontFamily(geometryFontFamily(first.geometry));
+        setEditFillColor(geometryFillColor(first.geometry, "#ffd7c2"));
+        setEditOutlineColor(balloonColor);
+        setEditTextColor("#ffffff");
+        setEditFontFamily("Space Grotesk");
       }
-      setLoadStatus(`Auto Balloon completed: ${created.length} created using ${response.detectorUsed}.`);
+
+      setLoadStatus(`Auto Balloon completed: ${created.length} balloons created using ${usedDetector}.`);
     } catch (balloonError) {
       setError(balloonError instanceof Error ? balloonError.message : "Failed to auto-balloon drawing");
       setLoadStatus("Auto Balloon failed.");
@@ -500,19 +594,29 @@ export function ViewerShell() {
     }
 
     setError(null);
+    const bx = Number(editX);
+    const by = Number(editY);
+    const leaderOffset = Number(editSize) * 2.5;
+    const leaderAngle = (editRotation * Math.PI) / 180;
+    const lx = Math.round(bx - Math.sin(leaderAngle) * leaderOffset);
+    const ly = Math.round(by + Math.cos(leaderAngle) * leaderOffset);
     try {
       const created = await createBalloon(
         session,
         drawingId,
         editLabel || `B-${String(balloons.length + 1).padStart(3, "0")}`,
         {
-          x: Number(editX),
-          y: Number(editY),
+          x: bx,
+          y: by,
+          leader_x: lx,
+          leader_y: ly,
+          leader_type: "straight",
           size: Number(editSize),
           fill_color: editNoFill ? "transparent" : editFillColor,
           outline_color: editOutlineColor,
           text_color: editTextColor,
           font_family: editFontFamily,
+          rotation: editRotation,
         },
       );
       setBalloons((current) => [...current, created]);
@@ -583,6 +687,42 @@ export function ViewerShell() {
       setBalloons((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : "Failed to persist balloon move");
+    }
+  }
+
+  async function rotateBalloonOnCanvas(balloonId: string, rotation: number) {
+    const target = balloons.find((entry) => entry.id === balloonId);
+    if (!target) {
+      return;
+    }
+
+    const roundedRotation = Math.round(rotation);
+
+    // Optimistically update local state
+    setBalloons((current) => current.map((entry) => (
+      entry.id === balloonId
+        ? {
+          ...entry,
+          geometry: { ...entry.geometry, rotation: roundedRotation },
+        }
+        : entry
+    )));
+
+    if (selectedBalloonId === balloonId) {
+      setEditRotation(roundedRotation);
+    }
+
+    if (!session) {
+      return;
+    }
+
+    try {
+      const updated = await updateBalloon(session, balloonId, {
+        geometry: { ...target.geometry, rotation: roundedRotation },
+      });
+      setBalloons((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+    } catch (rotateError) {
+      setError(rotateError instanceof Error ? rotateError.message : "Failed to persist balloon rotation");
     }
   }
 
@@ -849,11 +989,13 @@ export function ViewerShell() {
       y: geometryNumber(item.geometry, "y", 0),
       leaderX: geometryOptionalNumber(item.geometry, "leader_x"),
       leaderY: geometryOptionalNumber(item.geometry, "leader_y"),
+      leaderType: (item.geometry.leader_type as string) || "straight",
       fillColor: geometryFillColor(item.geometry),
-      outlineColor: geometryOutlineColor(item.geometry),
+      outlineColor: balloonColor, // Use single configured color
       size: geometrySize(item.geometry),
-      textColor: "#000000",
+      textColor: "#ffffff",
       fontFamily: geometryFontFamily(item.geometry),
+      rotation: geometryOptionalNumber(item.geometry, "rotation") ?? 0,
     };
   });
 
@@ -1033,16 +1175,6 @@ export function ViewerShell() {
     }
   }
 
-  const serviceDetails: Array<{ name: ServiceLabel; value: string | number | null }> = [
-    { name: "Drawing", value: result?.drawingId ?? null },
-    { name: "Balloon", value: result?.balloonId ?? null },
-    { name: "Revision", value: result?.revisionNumber ?? null },
-    { name: "Geometry", value: result?.geometryFeatures ?? null },
-    { name: "AI", value: result?.aiSuggestions ?? null },
-    { name: "DWG", value: result?.dwgJobId ?? null },
-    { name: "MCP", value: result?.mcpTool ?? null },
-  ];
-
   return (
     <main className="viewer-page">
       <header className="hero">
@@ -1055,321 +1187,194 @@ export function ViewerShell() {
       </header>
 
       <section className="workspace-shell" aria-label="editor-workspace">
-        <article className={`panel left-pane floating-tools ${toolsPanelOpen ? "open" : "collapsed"}`}>
-          <div className="button-row tools-panel-header">
-            <h2>{toolsPanelOpen ? "Load and Balloon Tools" : "Tools"}</h2>
-            <button type="button" className="secondary" onClick={() => setToolsPanelOpen((current) => !current)}>
+        {/* Horizontal Draggable Toolbar */}
+        <div
+          className={`horizontal-toolbar ${toolbarPosition} ${toolsPanelOpen ? "expanded" : "collapsed"} ${isDraggingToolbar ? "dragging" : ""}`}
+        >
+          <div
+            className="toolbar-drag-handle"
+            onMouseDown={handleToolbarDragStart}
+            title={`Drag to move toolbar to ${toolbarPosition === "top" ? "bottom" : "top"}`}
+          >
+            <span className="drag-grip" />
+          </div>
+
+          <div className="toolbar-main-row">
+            <h2 className="toolbar-title">Tools</h2>
+            <button type="button" className="secondary toolbar-toggle-btn" onClick={() => setToolsPanelOpen((current) => !current)}>
               {toolsPanelOpen ? "Minimize" : "Expand"}
             </button>
-          </div>
 
-          {!toolsPanelOpen ? <p className="timestamp">Floating controls</p> : null}
-
-          {toolsPanelOpen ? (
-            <>
-          <p className="panel-hint">Left pane controls loading and balloon operations. Right pane is the layered editor.</p>
-
-          <div className="field-row">
-            <label htmlFor="tenant-id">Tenant ID</label>
-            <input
-              id="tenant-id"
-              value={tenantId}
-              onChange={(event) => setTenantId(event.target.value)}
-              placeholder="tenant-ui-001"
-            />
-          </div>
-
-          <div className="button-row">
-            {session ? (
-              <button type="button" onClick={signOut} className="secondary">
-                Sign Out
+            {/* Always-visible quick actions */}
+            <div className="toolbar-quick-actions">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".dwg,.dxf,.pdf,.svg"
+                onChange={onDesktopFilePicked}
+                className="hidden-file-input"
+              />
+              <button type="button" className="secondary" onClick={openDesktopBrowse} disabled={!session}>
+                Browse
               </button>
-            ) : (
-              <button type="button" onClick={() => void signIn()} disabled={authBusy}>
-                {authBusy ? "Redirecting..." : "Sign In with Authentik"}
+              <button type="button" onClick={() => { void loadDrawing(); }} disabled={!session || !selectedFile || isLoadingDrawing}>
+                {isLoadingDrawing ? "Loading..." : "Load Drawing"}
               </button>
-            )}
-          </div>
-
-          <div className="meta-row">
-            <span>Session</span>
-            <strong>{session ? "Authenticated" : "Signed Out"}</strong>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".dwg,.dxf,.pdf,.svg"
-            onChange={onDesktopFilePicked}
-            className="hidden-file-input"
-          />
-
-          <div className="field-row">
-            <label>Desktop Drawing</label>
-            <div className="button-row">
-              <button type="button" onClick={openDesktopBrowse}>Browse Desktop File</button>
-              <p className="timestamp">{selectedFile?.name ?? "No file selected"}</p>
-            </div>
-          </div>
-
-          <div className="field-row">
-            <label htmlFor="source-format">Source Format</label>
-            <select
-              id="source-format"
-              value={sourceFormat}
-              onChange={(event) => setSourceFormat(event.target.value as DrawingFormat)}
-            >
-              <option value="DWG">DWG</option>
-              <option value="DXF">DXF</option>
-              <option value="PDF">PDF</option>
-              <option value="SVG">SVG</option>
-            </select>
-          </div>
-
-          <div className="meta-row">
-            <span>Source URI</span>
-            <strong>{sourceUri}</strong>
-          </div>
-
-          <div className="meta-row">
-            <span>Loaded Drawing</span>
-            <strong>{drawingId ?? "Not loaded"}</strong>
-          </div>
-
-          <button type="button" onClick={() => { void loadDrawing(); }} disabled={!session || !selectedFile || isLoadingDrawing}>
-            {isLoadingDrawing ? "Loading Drawing..." : "Load 2D Drawing"}
-          </button>
-
-          <button type="button" onClick={runAutoBalloon} disabled={!drawingId || !session}>
-            Auto Balloon
-          </button>
-
-          <div className="field-row">
-            <label htmlFor="detector-mode">Detection Mode</label>
-            <select
-              id="detector-mode"
-              value={detectorMode}
-              onChange={(event) => setDetectorMode(event.target.value as "paddleocr_opencv" | "heuristic" | "florence2" | "hybrid" | "pdf_worker")}
-            >
-              <option value="pdf_worker">1 - PyMuPDF (PDF Worker)</option>
-              <option value="paddleocr_opencv">2 - PaddleOCR + OpenCV</option>
-              <option value="florence2">3 - Florence-2</option>
-              <option value="hybrid">4 - Hybrid</option>
-              <option value="heuristic">5 - Heuristic</option>
-            </select>
-          </div>
-
-          <div className="meta-row">
-            <span>Detector Used</span>
-            <strong>{lastDetectorUsed ?? "Not run yet"}</strong>
-          </div>
-          <div className="meta-row">
-            <span>Attempted</span>
-            <strong>{lastAttemptedDetectors.length > 0 ? lastAttemptedDetectors.join(", ") : "Not run yet"}</strong>
-          </div>
-
-          <button type="button" onClick={convertToSvg} disabled={!session || !drawingId || !sourceUri.startsWith("minio://")}>
-            Refresh SVG Preview (Fallback)
-          </button>
-
-          <button type="button" onClick={() => void exportPdf()} disabled={!session || isExportingPdf}>
-            {isExportingPdf ? "Exporting PDF..." : "Export as New PDF"}
-          </button>
-
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => {
-              if (!pdfJob?.output_uri) {
-                setError("No exported PDF is available yet. Run export first.");
-                return;
-              }
-              void downloadGeneratedPdf(pdfJob.output_uri);
-            }}
-            disabled={!pdfJob?.output_uri}
-          >
-            Download Exported PDF
-          </button>
-
-          <button type="button" className="secondary" onClick={exportLayeredCanvasPdf} disabled={!session || !drawingId}>
-            Export Layered Canvas PDF
-          </button>
-
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => setExportPreviewOnly((current) => !current)}
-            disabled={viewerMode !== "annotation"}
-          >
-            {exportPreviewOnly ? "Exit Export Preview" : "Preview Export Content"}
-          </button>
-
-          {exportStatus ? <p className="timestamp">{exportStatus}</p> : null}
-          {exportPreviewOnly ? <p className="timestamp">Preview shows only drawing + balloons that will be exported.</p> : null}
-
-          <h2>Balloon Editing</h2>
-          <p className="panel-hint">Default layout: small circle with transparent center and colored outline.</p>
-
-          <div className="balloon-selector-list">
-            {balloons.length === 0 ? (
-              <p className="empty-state">No balloons available yet.</p>
-            ) : (
-              balloons.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`secondary ${selectedBalloonId === item.id ? "selected-balloon" : ""}`}
-                  onClick={() => selectBalloon(item.id)}
-                >
-                  {item.label} ({item.id.slice(0, 8)})
+              <button type="button" onClick={runAutoBalloon} disabled={!drawingId || !session}>
+                Auto Balloon
+              </button>
+              <button type="button" onClick={addBalloonFromEditor} disabled={!drawingId || !session}>
+                Add Balloon
+              </button>
+              <button type="button" onClick={saveBalloonChanges} disabled={!selectedBalloon || !session}>
+                Save
+              </button>
+              <button type="button" className="secondary" onClick={() => void deleteSelectedBalloon()} disabled={!selectedBalloon || !session}>
+                Delete
+              </button>
+              <button type="button" className="secondary" onClick={() => void undoLastCanvasChange()} disabled={!lastCanvasAction || !session}>
+                Undo
+              </button>
+              <button type="button" onClick={() => void exportPdf()} disabled={!session || isExportingPdf}>
+                {isExportingPdf ? "Exporting..." : "Export PDF"}
+              </button>
+              <span className="toolbar-status">{session ? "✓ Authenticated" : "✗ Signed Out"}</span>
+              {session ? (
+                <button type="button" className="secondary" onClick={signOut}>Sign Out</button>
+              ) : (
+                <button type="button" onClick={() => void signIn()} disabled={authBusy}>
+                  {authBusy ? "Redirecting..." : "Sign In"}
                 </button>
-              ))
-            )}
+              )}
+            </div>
           </div>
 
-          <div className="field-row">
-            <label htmlFor="balloon-label">Balloon Label</label>
-            <input
-              id="balloon-label"
-              value={editLabel}
-              onChange={(event) => setEditLabel(event.target.value)}
-              placeholder="B-001"
-            />
-          </div>
-          <div className="inline-fields">
-            <div className="field-row">
-              <label htmlFor="balloon-x">X</label>
-              <input
-                id="balloon-x"
-                value={editX}
-                onChange={(event) => setEditX(event.target.value)}
-              />
-            </div>
-            <div className="field-row">
-              <label htmlFor="balloon-y">Y</label>
-              <input
-                id="balloon-y"
-                value={editY}
-                onChange={(event) => setEditY(event.target.value)}
-              />
-            </div>
-            <div className="field-row">
-              <label htmlFor="balloon-size">Size</label>
-              <input
-                id="balloon-size"
-                type="number"
-                min={12}
-                max={120}
-                value={editSize}
-                onChange={(event) => setEditSize(event.target.value)}
-              />
-            </div>
-            <div className="field-row">
-              <label htmlFor="balloon-fill-color">Fill</label>
-              <input
-                id="balloon-fill-color"
-                type="color"
-                value={editFillColor}
-                onChange={(event) => setEditFillColor(event.target.value)}
-                disabled={editNoFill}
-              />
-            </div>
-            <label className="place-mode-toggle">
-              <input
-                type="checkbox"
-                checked={editNoFill}
-                onChange={(event) => setEditNoFill(event.target.checked)}
-              />
-              No Fill (Transparent Center)
-            </label>
-            <div className="field-row">
-              <label htmlFor="balloon-outline-color">Outline</label>
-              <input
-                id="balloon-outline-color"
-                type="color"
-                value={editOutlineColor}
-                onChange={(event) => setEditOutlineColor(event.target.value)}
-              />
-            </div>
-            <div className="field-row">
-              <label htmlFor="balloon-text-color">Text Color</label>
-              <input
-                id="balloon-text-color"
-                type="color"
-                value={editTextColor}
-                onChange={(event) => setEditTextColor(event.target.value)}
-              />
-            </div>
-            <div className="field-row">
-              <label htmlFor="balloon-font-family">Font</label>
-              <select
-                id="balloon-font-family"
-                value={editFontFamily}
-                onChange={(event) => setEditFontFamily(event.target.value)}
-              >
-                <option value="Space Grotesk">Space Grotesk</option>
-                <option value="IBM Plex Sans">IBM Plex Sans</option>
-                <option value="Georgia">Georgia</option>
-                <option value="Arial">Arial</option>
-              </select>
-            </div>
-          </div>
-          <label className="place-mode-toggle">
-            <input
-              type="checkbox"
-              checked={placeModeEnabled}
-              onChange={(event) => setPlaceModeEnabled(event.target.checked)}
-            />
-            Click canvas to place balloon directly
-          </label>
-          <div className="snap-row">
-            <label className="place-mode-toggle">
-              <input
-                type="checkbox"
-                checked={snapToGridEnabled}
-                onChange={(event) => setSnapToGridEnabled(event.target.checked)}
-              />
-              Snap moves/placement to grid
-            </label>
-            <div className="field-row compact-field">
-              <label htmlFor="grid-size">Grid</label>
-              <input
-                id="grid-size"
-                type="number"
-                min={2}
-                max={80}
-                value={gridSizeInput}
-                onChange={(event) => setGridSizeInput(event.target.value)}
-              />
-            </div>
-          </div>
-          <button type="button" onClick={addBalloonFromEditor} disabled={!drawingId || !session}>
-            Add Balloon
-          </button>
-          <button type="button" onClick={saveBalloonChanges} disabled={!selectedBalloon || !session}>
-            Save Balloon Changes
-          </button>
-          <button type="button" className="secondary" onClick={() => void deleteSelectedBalloon()} disabled={!selectedBalloon || !session}>
-            Delete Selected Balloon
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void undoLastCanvasChange()}
-            disabled={!lastCanvasAction || !session}
-          >
-            Undo Last Move/Place
-          </button>
-          <button type="button" onClick={runWorkflow} disabled={isRunning || !session}>
-            {isRunning ? "Running Workflow..." : "Run Full Feature Flow"}
-          </button>
+          {/* Expanded panel with all controls */}
+          {toolsPanelOpen ? (
+            <div className="toolbar-expanded-content">
+              <div className="toolbar-section">
+                <h3>Drawing Source</h3>
+                <div className="toolbar-fields-row">
+                  <div className="field-row compact-field">
+                    <label htmlFor="tenant-id">Tenant</label>
+                    <input id="tenant-id" value={tenantId} onChange={(event) => setTenantId(event.target.value)} placeholder="tenant-ui-001" />
+                  </div>
+                  <div className="field-row compact-field">
+                    <label htmlFor="source-format">Format</label>
+                    <select id="source-format" value={sourceFormat} onChange={(event) => setSourceFormat(event.target.value as DrawingFormat)}>
+                      <option value="DWG">DWG</option>
+                      <option value="DXF">DXF</option>
+                      <option value="PDF">PDF</option>
+                      <option value="SVG">SVG</option>
+                    </select>
+                  </div>
+                  <div className="field-row compact-field">
+                    <label htmlFor="detector-mode">Detector</label>
+                    <select id="detector-mode" value={detectorMode} onChange={(event) => setDetectorMode(event.target.value as "paddleocr_opencv" | "heuristic" | "florence2" | "hybrid" | "pdf_worker")}>
+                      <option value="pdf_worker">PyMuPDF</option>
+                      <option value="paddleocr_opencv">PaddleOCR</option>
+                      <option value="florence2">Florence-2</option>
+                      <option value="hybrid">Hybrid</option>
+                      <option value="heuristic">Heuristic</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="toolbar-meta-row">
+                  <span>Source: {sourceUri}</span>
+                  <span>Drawing: {drawingId ?? "Not loaded"}</span>
+                  <span>Detector: {lastDetectorUsed ?? "N/A"}</span>
+                </div>
+                <div className="toolbar-actions-row">
+                  <button type="button" className="secondary" onClick={() => setExportPreviewOnly((current) => !current)} disabled={viewerMode !== "annotation"}>
+                    {exportPreviewOnly ? "Show Grid/HUD" : "Hide Grid/HUD"}
+                  </button>
+                </div>
+                {exportPreviewOnly ? <p className="timestamp">Grid, HUD, and helper markers are hidden for a cleaner view.</p> : null}
+              </div>
 
-          {lastRunAt ? <p className="timestamp">Last successful run: {lastRunAt}</p> : null}
-          {error ? <p role="alert" className="error">Error: {error}</p> : null}
-          <p className="timestamp">Balloon ID: {selectedBalloon?.id ?? "No balloon selected"}</p>
-            </>
+              <div className="toolbar-section">
+                <h3>Balloon Editing</h3>
+                <div className="balloon-selector-list horizontal-selector">
+                  {balloons.length === 0 ? (
+                    <p className="empty-state">No balloons yet.</p>
+                  ) : (
+                    balloons.map((item) => (
+                      <button key={item.id} type="button" className={`secondary ${selectedBalloonId === item.id ? "selected-balloon" : ""}`} onClick={() => selectBalloon(item.id)}>
+                        {item.label}
+                      </button>
+                    ))
+                  )}
+                </div>
+                <div className="toolbar-fields-row">
+                  <div className="field-row compact-field">
+                    <label htmlFor="balloon-label">Label</label>
+                    <input id="balloon-label" value={editLabel} onChange={(event) => setEditLabel(event.target.value)} placeholder="B-001" />
+                  </div>
+                  <div className="field-row compact-field">
+                    <label htmlFor="balloon-x">X</label>
+                    <input id="balloon-x" value={editX} onChange={(event) => setEditX(event.target.value)} />
+                  </div>
+                  <div className="field-row compact-field">
+                    <label htmlFor="balloon-y">Y</label>
+                    <input id="balloon-y" value={editY} onChange={(event) => setEditY(event.target.value)} />
+                  </div>
+                  <div className="field-row compact-field">
+                    <label htmlFor="balloon-size">Size</label>
+                    <input id="balloon-size" type="number" min={12} max={120} value={editSize} onChange={(event) => setEditSize(event.target.value)} />
+                  </div>
+                  <div className="field-row compact-field">
+                    <label htmlFor="balloon-fill-color">Fill</label>
+                    <input id="balloon-fill-color" type="color" value={editFillColor} onChange={(event) => setEditFillColor(event.target.value)} disabled={editNoFill} />
+                  </div>
+                  <div className="field-row compact-field">
+                    <label htmlFor="balloon-outline-color">Outline</label>
+                    <input id="balloon-outline-color" type="color" value={editOutlineColor} onChange={(event) => setEditOutlineColor(event.target.value)} />
+                  </div>
+                  <div className="field-row compact-field">
+                    <label htmlFor="balloon-text-color">Text</label>
+                    <input id="balloon-text-color" type="color" value={editTextColor} onChange={(event) => setEditTextColor(event.target.value)} />
+                  </div>
+                  <div className="field-row compact-field">
+                    <label htmlFor="balloon-font-family">Font</label>
+                    <select id="balloon-font-family" value={editFontFamily} onChange={(event) => setEditFontFamily(event.target.value)}>
+                      <option value="Space Grotesk">Space Grotesk</option>
+                      <option value="IBM Plex Sans">IBM Plex Sans</option>
+                      <option value="Georgia">Georgia</option>
+                      <option value="Arial">Arial</option>
+                    </select>
+                  </div>
+                  <div className="field-row compact-field rotation-field">
+                    <label htmlFor="balloon-rotation">Rotation</label>
+                    <input id="balloon-rotation" type="range" min={-180} max={180} step={5} value={editRotation} onChange={(event) => setEditRotation(Number(event.target.value))} />
+                    <span className="rotation-value">{editRotation}°</span>
+                  </div>
+                </div>
+                <div className="toolbar-toggles-row">
+                  <label className="place-mode-toggle">
+                    <input type="checkbox" checked={editNoFill} onChange={(event) => setEditNoFill(event.target.checked)} />
+                    No Fill
+                  </label>
+                  <label className="place-mode-toggle">
+                    <input type="checkbox" checked={placeModeEnabled} onChange={(event) => setPlaceModeEnabled(event.target.checked)} />
+                    Place on Click
+                  </label>
+                  <label className="place-mode-toggle">
+                    <input type="checkbox" checked={snapToGridEnabled} onChange={(event) => setSnapToGridEnabled(event.target.checked)} />
+                    Snap to Grid
+                  </label>
+                  <div className="field-row compact-field">
+                    <label htmlFor="grid-size">Grid</label>
+                    <input id="grid-size" type="number" min={2} max={80} value={gridSizeInput} onChange={(event) => setGridSizeInput(event.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              {error ? <p role="alert" className="error">Error: {error}</p> : null}
+              {lastRunAt ? <p className="timestamp">Last run: {lastRunAt}</p> : null}
+              <p className="timestamp">Selected: {selectedBalloon?.id ?? "None"} | File: {selectedFile?.name ?? "None"}</p>
+            </div>
           ) : null}
-        </article>
+        </div>
 
         <article className="panel right-pane viewer-stage-panel">
           <div className="button-row">
@@ -1433,6 +1438,9 @@ export function ViewerShell() {
                 onMoveBalloon={(payload) => {
                   void moveBalloonOnCanvas(payload.id, payload.x, payload.y);
                 }}
+                onRotateBalloon={(payload) => {
+                  void rotateBalloonOnCanvas(payload.id, payload.rotation);
+                }}
                 onCanvasClick={(point) => {
                   void placeBalloonFromCanvas(point.x, point.y);
                 }}
@@ -1442,63 +1450,6 @@ export function ViewerShell() {
         </article>
       </section>
 
-      <section className="grid-shell info-panels" aria-label="information-panels">
-        <article className="panel status-panel" aria-live="polite">
-          <h2>Drawing Workbench</h2>
-          <div className="service-grid">
-            {serviceDetails.map((service, index) => {
-              const hasValue = service.value !== null;
-              const runningCurrent = isRunning && !result && index === 0;
-              const isComplete = hasValue && !isRunning;
-
-              return (
-                <div
-                  key={service.name}
-                  className={`service-card ${isComplete ? "complete" : "idle"} ${runningCurrent ? "running" : ""}`}
-                >
-                  <p className="service-name">{service.name}</p>
-                  <p className="service-value">{hasValue ? String(service.value) : "Pending"}</p>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="workbench-details">
-            <div className="meta-row">
-              <span>Viewer Format</span>
-              <strong>{activeFormat}</strong>
-            </div>
-            <div className="meta-row">
-              <span>SVG Conversion</span>
-              <strong>{svgJob?.output_uri ?? "Not converted"}</strong>
-            </div>
-            <div className="meta-row">
-              <span>PDF Export</span>
-              <strong>{pdfJob?.output_uri ?? "Not exported"}</strong>
-            </div>
-          </div>
-        </article>
-
-        <article className="panel visual-panel">
-          <h2>Balloon Overlay</h2>
-          <p className="panel-hint">Generated overlay metadata from AI and balloon services.</p>
-          <BalloonOverlayLayer
-            balloons={canvasBalloons}
-            selectedBalloonId={selectedBalloonId}
-            aiSuggestions={aiSuggestionCount}
-          />
-        </article>
-      </section>
-
-      <section className="panel" aria-label="service-workflow-result">
-        <h2>Payload Snapshot</h2>
-        <p className="panel-hint">Exact response object returned by the orchestrated service flow.</p>
-        {result ? (
-          <pre>{JSON.stringify(result, null, 2)}</pre>
-        ) : (
-          <p className="empty-state">Run the workflow to generate a real payload snapshot.</p>
-        )}
-      </section>
     </main>
   );
 }

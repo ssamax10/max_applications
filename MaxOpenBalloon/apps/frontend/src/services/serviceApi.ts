@@ -91,6 +91,7 @@ const servicePorts = {
   mcp: 18005,
   revision: 18006,
   dwg: 18007,
+  pdfWorker: 18008,
 };
 
 function serviceBase(port: number): string {
@@ -102,6 +103,7 @@ function serviceBase(port: number): string {
     [servicePorts.mcp]: import.meta.env.VITE_MCP_API_BASE,
     [servicePorts.revision]: import.meta.env.VITE_REVISION_API_BASE,
     [servicePorts.dwg]: import.meta.env.VITE_DWG_TRANSLATION_API_BASE,
+    [servicePorts.pdfWorker]: import.meta.env.VITE_PDF_WORKER_API_BASE,
   };
 
   const configuredBase = configuredBaseByPort[port]?.trim();
@@ -619,6 +621,97 @@ export async function runFeatureFlow(tenantId: string): Promise<ServiceResult> {
     dwgJobId: dwg.job_id,
     mcpTool: mcp.tool,
   };
+}
+
+export type InspectionCharacteristic = {
+  characteristic: number;
+  feature: string;
+  dimension: string;
+  tolerance: string;
+  datum: string[];
+  gdt_type?: string | null;
+  gdt_value?: string | null;
+  confidence: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type InspectionExtractionResult = {
+  document_id: string;
+  characteristics: InspectionCharacteristic[];
+  statistics: {
+    total_characteristics: number;
+    features: number;
+    dimensions: number;
+    gdt_tolerances: number;
+  };
+};
+
+export async function extractInspection(
+  session: SessionContext,
+  pdfBlob: Blob,
+): Promise<InspectionExtractionResult> {
+  const baseHeaders: Record<string, string> = {
+    "X-Tenant-ID": session.tenantId,
+  };
+
+  const preflightSession = await refreshOidcSession();
+  const initialToken = session.accessToken ?? preflightSession?.accessToken ?? getStoredOidcSession()?.accessToken ?? null;
+  const headers = initialToken
+    ? { ...baseHeaders, Authorization: `Bearer ${initialToken}` }
+    : baseHeaders;
+
+  const response = await fetch(`${serviceBase(servicePorts.pdfWorker)}/inspection/extract`, {
+    method: "POST",
+    headers,
+    body: pdfBlob,
+  });
+
+  if (!response.ok) {
+    let detail = await response.text();
+    const tokenRejected = response.status === 401
+      && /missing bearer token|invalid bearer token|unable to validate bearer token|token/i.test(detail);
+
+    if (tokenRejected) {
+      try {
+        const refreshed = await refreshOidcSession(true);
+        if (refreshed?.accessToken && refreshed.accessToken !== initialToken) {
+          const retry = await fetch(`${serviceBase(servicePorts.pdfWorker)}/inspection/extract`, {
+            method: "POST",
+            headers: { ...baseHeaders, Authorization: `Bearer ${refreshed.accessToken}` },
+            body: pdfBlob,
+          });
+
+          if (retry.ok) {
+            return (await retry.json()) as InspectionExtractionResult;
+          }
+
+          detail = await retry.text();
+          throw new Error(`Request failed: ${retry.status} ${retry.statusText} ${detail}`.trim());
+        }
+      } catch {
+        // fall through to legacy fallback below
+      }
+    }
+
+    if (response.status === 401 && /missing bearer token|invalid bearer token/i.test(detail)) {
+      const fallback = await fetch(`${serviceBase(servicePorts.pdfWorker)}/inspection/extract`, {
+        method: "POST",
+        headers: baseHeaders,
+        body: pdfBlob,
+      });
+
+      if (fallback.ok) {
+        return (await fallback.json()) as InspectionExtractionResult;
+      }
+
+      detail = await fallback.text();
+      throw new Error(`Request failed: ${fallback.status} ${fallback.statusText} ${detail}`.trim());
+    }
+
+    throw new Error(`Request failed: ${response.status} ${response.statusText} ${detail}`.trim());
+  }
+
+  return (await response.json()) as InspectionExtractionResult;
 }
 
 export function parseJwtRoles(token: string): string[] {

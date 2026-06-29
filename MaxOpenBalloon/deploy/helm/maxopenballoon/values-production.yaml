@@ -1,0 +1,132 @@
+# Production Helm Values - With Authentication Enabled
+# Usage: helm install maxopenballoon ./deploy/helm/maxopenballoon -f values-production.yaml
+
+# Image configuration
+image:
+  repository: maxopenballoon
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Replica count
+replicaCount: 3
+
+# Service ports
+service:
+  type: ClusterIP
+  ports:
+    frontend: 80
+    api: 8080
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: maxopenballoon.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: maxopenballoon-tls
+      hosts:
+        - maxopenballoon.example.com
+
+# Environment variables - Production with Auth
+env:
+  # Database
+  POSTGRES_DB: maxopenballoon
+  POSTGRES_USER: max
+  POSTGRES_PASSWORD: "CHANGE_ME"
+  POSTGRES_PORT: "5432"
+
+  # MinIO
+  MINIO_ROOT_USER: minio
+  MINIO_ROOT_PASSWORD: "CHANGE_ME"
+  MINIO_API_PORT: "9010"
+  MINIO_CONSOLE_PORT: "9011"
+
+  # OIDC/Auth - Production Authentik
+  OIDC_ISSUER: "https://auth.edge.example.com/application/o/maxopenballoon/"
+  OIDC_JWKS_URL: ""
+  OIDC_AUDIENCE: ""
+  AUTH_REQUIRED: "true"
+  TENANT_CLAIM: "tenant_id"
+  ALLOW_TENANT_HEADER_FALLBACK: "false"
+  CORS_ALLOW_ORIGINS: "https://maxopenballoon.example.com"
+  AUTHENTIK_SECRET_KEY: "CHANGE_ME"
+
+  # Services
+  OPENFGA_URL: "http://openfga:8080"
+  OPENFGA_PORT: "8081"
+  AUTHENTIK_PORT: "19000"
+  REDIS_PORT: "6379"
+  FRONTEND_PORT: "5173"
+  DRAWING_SERVICE_PORT: "18001"
+  GEOMETRY_SERVICE_PORT: "18002"
+  BALLOON_SERVICE_PORT: "18003"
+  AI_SERVICE_PORT: "18004"
+  MCP_SERVICE_PORT: "18005"
+  REVISION_SERVICE_PORT: "18006"
+  DWG_TRANSLATION_SERVICE_PORT: "18007"
+  DWG_TRANSLATION_PUBLIC_BASE_URL: "https://maxopenballoon.example.com"
+  DWG_CONVERSION_ENGINE: "qcad"
+  QCAD_CMD: "/usr/bin/qcad"
+  QCAD_SCRIPT_PATH: "/app/app/scripts/qcad_dwg_to_pdf.js"
+  CONVERSION_TIMEOUT_SECONDS: "600"
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+
+  # Frontend - Production OIDC
+  VITE_DRAWING_API_BASE: "https://maxopenballoon.example.com/api/drawing"
+  VITE_GEOMETRY_API_BASE: "https://maxopenballoon.example.com/api/geometry"
+  VITE_BALLOON_API_BASE: "https://maxopenballoon.example.com/api/balloon"
+  VITE_AI_API_BASE: "https://maxopenballoon.example.com/api/ai"
+  VITE_MCP_API_BASE: "https://maxopenballoon.example.com/api/mcp"
+  VITE_REVISION_API_BASE: "https://maxopenballoon.example.com/api/revision"
+  VITE_DWG_TRANSLATION_API_BASE: "https://maxopenballoon.example.com/api/dwg"
+  VITE_OIDC_ISSUER: "https://auth.edge.example.com/application/o/maxopenballoon/"
+  VITE_OIDC_CLIENT_ID: "maxopenballoon-frontend"
+  VITE_OIDC_REDIRECT_URI: "https://maxopenballoon.example.com"
+  VITE_OIDC_SCOPE: "openid profile email oidc-tenant_id"
+  VITE_OIDC_AUTHORIZATION_ENDPOINT: ""
+  VITE_OIDC_TOKEN_ENDPOINT: ""
+  VITE_TENANT_CLAIM: "tenant_id"
+
+# Resource limits
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Monitoring
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsNonRoot: true

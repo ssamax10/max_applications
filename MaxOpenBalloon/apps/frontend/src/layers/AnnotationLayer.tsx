@@ -3,7 +3,7 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-import { Circle, Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text } from "react-konva";
+import { Circle, Group, Image as KonvaImage, Layer, Line, Rect, Shape, Stage, Text, Transformer } from "react-konva";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
@@ -56,22 +56,26 @@ type AnnotationLayerProps = {
     y: number;
     leaderX?: number | null;
     leaderY?: number | null;
+    leaderType?: string;
     fillColor: string;
     outlineColor: string;
     size: number;
     textColor: string;
     fontFamily: string;
+    rotation?: number;
   }>;
   selectedBalloonId: string | null;
   onCanvasClick?: (point: { x: number; y: number }) => void;
   onSelectBalloon?: (balloonId: string) => void;
   onDeselectBalloon?: () => void;
   onMoveBalloon?: (payload: { id: string; x: number; y: number }) => void;
+  onRotateBalloon?: (payload: { id: string; rotation: number }) => void;
   drawingLayerUrl?: string | null;
   drawingLayerFormat?: "SVG" | "PDF" | "DWG" | "DXF" | null;
   drawingLayerLabel?: string;
   stageRef?: RefObject<any>;
   exportPreviewOnly?: boolean;
+  balloonColor?: string;
 };
 
 export function AnnotationLayer({
@@ -82,13 +86,16 @@ export function AnnotationLayer({
   onSelectBalloon,
   onDeselectBalloon,
   onMoveBalloon,
+  onRotateBalloon,
   drawingLayerUrl,
   drawingLayerFormat,
   drawingLayerLabel,
   stageRef,
   exportPreviewOnly = false,
+  balloonColor = "#800000",
 }: AnnotationLayerProps) {
   const internalStageRef = useRef<any>(null);
+  const transformerRef = useRef<any>(null);
   const safeCount = Math.max(1, Math.min(featureCount || 3, 8));
   const markers = Array.from({ length: safeCount }, (_, index) => ({
     id: index + 1,
@@ -117,10 +124,37 @@ export function AnnotationLayer({
   });
 
   useEffect(() => {
+    const transformer = transformerRef.current;
+    if (!transformer) return;
+
+    const stage = internalStageRef.current;
+    if (!stage) return;
+
+    if (selectedBalloonId) {
+      const node = stage.findOne(`#balloon-group-${selectedBalloonId}`);
+      if (node) {
+        transformer.nodes([node]);
+        transformer.getLayer()?.batchDraw();
+      }
+    } else {
+      transformer.nodes([]);
+      transformer.getLayer()?.batchDraw();
+    }
+  }, [selectedBalloonId, balloons]);
+
+  useEffect(() => {
     function updateViewport() {
-      const width = Math.max(760, window.innerWidth - 120);
-      const height = Math.max(480, window.innerHeight - 220);
-      setViewportSize({ width, height });
+      const container = internalStageRef.current?.container()?.parentElement;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const width = Math.max(760, Math.floor(rect.width));
+        const height = Math.max(480, Math.floor(rect.height));
+        setViewportSize({ width, height });
+      } else {
+        const width = Math.max(760, window.innerWidth - 120);
+        const height = Math.max(480, window.innerHeight - 220);
+        setViewportSize({ width, height });
+      }
     }
 
     updateViewport();
@@ -148,10 +182,7 @@ export function AnnotationLayer({
           const loadingTask = getDocument(layerUrl);
           const pdfDocument = await loadingTask.promise;
           const page = await pdfDocument.getPage(1);
-          // Force rotation=0 so display coordinates match detector coordinates.
-          // Some PDF viewers auto-apply page rotation metadata while detectors return raw page-space points.
           const nativeViewport = page.getViewport({ scale: 1, rotation: 0 });
-          // Render at higher scale for visual quality but map coordinates using PDF-point dimensions.
           const renderScale = 1.5;
           const viewport = page.getViewport({ scale: renderScale, rotation: 0 });
 
@@ -169,8 +200,6 @@ export function AnnotationLayer({
           image.onload = () => {
             if (!cancelled) {
               setDrawingLayerImage(image);
-              // Store the PDF point dimensions (scale=1), NOT the rendered pixel size.
-              // This ensures toCanvasPoint maps detector coordinates (in PDF points) correctly.
               setDrawingLayerDimensions({ width: nativeViewport.width, height: nativeViewport.height });
             }
           };
@@ -290,6 +319,17 @@ export function AnnotationLayer({
     onCanvasClick({ x: clampedX, y: clampedY });
   }
 
+  /** Clamp stage position so the drawing doesn't go completely out of view */
+  function clampStagePosition(pos: { x: number; y: number }, scale: number) {
+    const margin = 100;
+    const maxPanX = (canvasWidth * scale) / 2 + margin;
+    const maxPanY = (canvasHeight * scale) / 2 + margin;
+    return {
+      x: Math.max(-maxPanX, Math.min(maxPanX, pos.x)),
+      y: Math.max(-maxPanY, Math.min(maxPanY, pos.y)),
+    };
+  }
+
   function applyZoom(nextScale: number, anchor: { x: number; y: number }) {
     const clampedScale = Math.max(minZoom, Math.min(maxZoom, nextScale));
     const stage = internalStageRef.current;
@@ -306,11 +346,13 @@ export function AnnotationLayer({
     const rotatedX = (worldPoint.x - offsetX) * clampedScale;
     const rotatedY = (worldPoint.y - offsetY) * clampedScale;
 
-    setZoomScale(clampedScale);
-    setStagePosition({
+    const newPos = {
       x: anchor.x - offsetX - (rotatedX * cos - rotatedY * sin),
       y: anchor.y - offsetY - (rotatedX * sin + rotatedY * cos),
-    });
+    };
+
+    setZoomScale(clampedScale);
+    setStagePosition(clampStagePosition(newPos, clampedScale));
   }
 
   function zoomFromCenter(multiplier: number) {
@@ -339,10 +381,10 @@ export function AnnotationLayer({
     const rotatedY = (worldPoint.y - offsetY) * zoomScale;
 
     setStageRotation(normalizedRotation);
-    setStagePosition({
+    setStagePosition(clampStagePosition({
       x: anchor.x - offsetX - (rotatedX * cos - rotatedY * sin),
       y: anchor.y - offsetY - (rotatedX * sin + rotatedY * cos),
-    });
+    }, zoomScale));
   }
 
   function rotateFromCenter(deltaDegrees: number) {
@@ -359,8 +401,8 @@ export function AnnotationLayer({
   }
 
   return (
-    <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" onClick={() => zoomFromCenter(1 / 1.15)}>Zoom Out</button>
         <button type="button" onClick={() => zoomFromCenter(1.15)}>Zoom In</button>
         <button type="button" className="secondary" onClick={fitToDrawing}>Fit Drawing</button>
@@ -384,13 +426,25 @@ export function AnnotationLayer({
         scaleX={zoomScale}
         scaleY={zoomScale}
         rotation={stageRotation}
-        onDragEnd={(event) => {
-          setStagePosition({
+        onDragEnd={(event: any) => {
+          const rawPos = {
             x: event.target.x() - canvasWidth / 2,
             y: event.target.y() - canvasHeight / 2,
-          });
+          };
+          setStagePosition(clampStagePosition(rawPos, zoomScale));
         }}
-        onWheel={(event) => {
+        onMouseDown={(event: any) => {
+          // Only handle clicks directly on the Stage (empty canvas space), not on child nodes
+          if (event.target === event.currentTarget) {
+            const pointer = event.currentTarget.getPointerPosition();
+            if (pointer) {
+              const world = event.currentTarget.getAbsoluteTransform().copy().invert().point(pointer);
+              handleCanvasClick(world.x, world.y);
+              onDeselectBalloon?.();
+            }
+          }
+        }}
+        onWheel={(event: any) => {
           event.evt.preventDefault();
           const stage = event.target.getStage();
           const pointer = stage?.getPointerPosition();
@@ -402,15 +456,7 @@ export function AnnotationLayer({
           applyZoom(zoomScale * zoomDirection, pointer);
         }}
       >
-        <Layer
-          onMouseDown={(event) => {
-            const target = event.target;
-            const balloonNode = target.findAncestor(".balloon-layer", true);
-            if (!balloonNode) {
-              onDeselectBalloon?.();
-            }
-          }}
-        >
+        <Layer>
           <Rect
             name="background-canvas"
             x={0}
@@ -418,7 +464,7 @@ export function AnnotationLayer({
             width={canvasWidth}
             height={canvasHeight}
             fill={exportPreviewOnly ? "rgba(0,0,0,0)" : "#fff9ee"}
-            onMouseDown={(event) => {
+            onMouseDown={(event: any) => {
               const stage = event.target.getStage();
               const pointer = stage?.getPointerPosition();
               if (!stage || !pointer) {
@@ -427,6 +473,7 @@ export function AnnotationLayer({
 
               const world = stage.getAbsoluteTransform().copy().invert().point(pointer);
               handleCanvasClick(world.x, world.y);
+              onDeselectBalloon?.();
             }}
           />
           {Array.from({ length: Math.ceil(canvasWidth / gridStepX) + 1 }, (_, col) => (
@@ -479,46 +526,95 @@ export function AnnotationLayer({
             const hasLeader = typeof balloon.leaderX === "number" && Number.isFinite(balloon.leaderX)
               && typeof balloon.leaderY === "number" && Number.isFinite(balloon.leaderY);
             const leaderCanvasPoint = hasLeader ? toCanvasPoint({ x: balloon.leaderX as number, y: balloon.leaderY as number }) : null;
-            const leaderDx = leaderCanvasPoint ? leaderCanvasPoint.x - canvasPoint.x : 0;
-            const leaderDy = leaderCanvasPoint ? leaderCanvasPoint.y - canvasPoint.y : 0;
-            const leaderDistance = Math.hypot(leaderDx, leaderDy);
             const radius = Math.max(8, balloon.size / 2);
-            const leaderStartX = hasLeader && leaderDistance > 0 ? (leaderDx / leaderDistance) * radius : 0;
-            const leaderStartY = hasLeader && leaderDistance > 0 ? (leaderDy / leaderDistance) * radius : 0;
+            const balloonRotation = balloon.rotation ?? 0;
+
+            // Compute leader direction in absolute canvas space
+            let leaderAngle = 0;
+            let leaderDistance = 0;
+            if (hasLeader && leaderCanvasPoint) {
+              const dx = leaderCanvasPoint.x - canvasPoint.x;
+              const dy = leaderCanvasPoint.y - canvasPoint.y;
+              leaderDistance = Math.hypot(dx, dy);
+              leaderAngle = Math.atan2(dy, dx);
+            }
+
+            // Protrusion (arrow-head tab) attached to the circle, pointing toward leader
+            const protrusionHeight = Math.min(12, radius * 0.5);
+            const protrusionHalfAngle = Math.PI / 10; // ~18 degrees half-width
+            const balloonRotationRad = (balloonRotation * Math.PI) / 180;
+            const localLeaderAngle = leaderAngle;
+
+            const showProtrusion = hasLeader && leaderCanvasPoint && leaderDistance > radius + 4;
+
+            // Protrusion vertices in local (Group) coordinates
+            // Base points on the circle circumference so wedge attaches seamlessly
+            const protrusionTipLocal = showProtrusion
+              ? {
+                  x: Math.cos(localLeaderAngle) * (radius + protrusionHeight),
+                  y: Math.sin(localLeaderAngle) * (radius + protrusionHeight),
+                }
+              : null;
+            const protrusionBaseLeft = showProtrusion
+              ? {
+                  x: Math.cos(localLeaderAngle - protrusionHalfAngle) * radius,
+                  y: Math.sin(localLeaderAngle - protrusionHalfAngle) * radius,
+                }
+              : null;
+            const protrusionBaseRight = showProtrusion
+              ? {
+                  x: Math.cos(localLeaderAngle + protrusionHalfAngle) * radius,
+                  y: Math.sin(localLeaderAngle + protrusionHalfAngle) * radius,
+                }
+              : null;
+
             return [
+              // Balloon Group: circle + protrusion + text (rotatable together)
               <Group
                 name="balloon-layer"
+                id={`balloon-group-${balloon.id}`}
                 key={`balloon-${balloon.id}`}
                 x={canvasPoint.x}
                 y={canvasPoint.y}
+                rotation={balloonRotation}
                 draggable
-                onMouseDown={(event) => {
+                onMouseDown={(event: any) => {
                   event.cancelBubble = true;
                   onSelectBalloon?.(balloon.id);
                 }}
-                onDragEnd={(event) => {
+                onDragEnd={(event: any) => {
                   const point = event.target.position();
                   const sourcePoint = toSourcePoint({ x: point.x, y: point.y });
                   onMoveBalloon?.({ id: balloon.id, x: sourcePoint.x, y: sourcePoint.y });
                 }}
               >
-                <Circle
-                  radius={radius}
+                <Shape
+                  sceneFunc={(context: any, shape: any) => {
+                    context.beginPath();
+                    if (showProtrusion && protrusionTipLocal && protrusionBaseLeft && protrusionBaseRight) {
+                      // Draw the circle from wedge-end around to wedge-start (covering the circle except the wedge base)
+                      context.arc(
+                        0, 0, radius,
+                        localLeaderAngle + protrusionHalfAngle,   // wedge-end angle
+                        Math.PI * 2 + (localLeaderAngle - protrusionHalfAngle), // wedge-start angle (wrapped past 2π)
+                        false
+                      );
+                      // Line outward to wedge tip
+                      context.lineTo(protrusionTipLocal.x, protrusionTipLocal.y);
+                      // Line back to wedge-end on circle
+                      context.lineTo(protrusionBaseRight.x, protrusionBaseRight.y);
+                    } else {
+                      // No wedge — draw a full circle
+                      context.arc(0, 0, radius, 0, Math.PI * 2, false);
+                    }
+                    context.closePath();
+                    context.fillStrokeShape(shape);
+                  }}
                   fill={balloon.fillColor}
-                  stroke={selected ? "#ffffff" : balloon.outlineColor}
+                  stroke={selected ? "#ffffff" : balloonColor}
                   strokeWidth={3}
                   opacity={0.95}
                 />
-                {hasLeader && leaderDistance > 2
-                  ? (
-                    <Line
-                      points={[leaderStartX, leaderStartY, leaderDx, leaderDy]}
-                      stroke={balloon.outlineColor}
-                      strokeWidth={1.5}
-                      opacity={0.9}
-                    />
-                  )
-                  : null}
                 <Text
                   x={0}
                   y={0}
@@ -536,6 +632,26 @@ export function AnnotationLayer({
             ];
           })}
 
+          <Transformer
+            ref={transformerRef}
+            rotateEnabled={true}
+            enabledAnchors={["middle-left"]}
+            borderStroke={balloonColor}
+            borderStrokeWidth={2}
+            anchorStroke={balloonColor}
+            anchorFill="#ffffff"
+            anchorSize={10}
+            rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+            onTransformEnd={() => {
+              if (!selectedBalloonId) return;
+              const stage = internalStageRef.current;
+              if (!stage) return;
+              const node = stage.findOne(`#balloon-group-${selectedBalloonId}`);
+              if (!node) return;
+              const newRotation = node.rotation();
+              onRotateBalloon?.({ id: selectedBalloonId, rotation: newRotation });
+            }}
+          />
           {markers.map((marker) => (
             <Circle
               name="helper-marker"

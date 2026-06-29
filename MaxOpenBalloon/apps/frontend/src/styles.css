@@ -126,21 +126,220 @@ body {
   grid-column: span 12;
 }
 
-.left-pane.floating-tools {
-  position: fixed;
-  top: 0.9rem;
-  left: 0.9rem;
-  width: min(360px, calc(100vw - 1.8rem));
-  max-height: calc(100vh - 1.8rem);
-  overflow: auto;
-  z-index: 45;
-  backdrop-filter: blur(3px);
+/* ── Horizontal Draggable Toolbar ── */
+.horizontal-toolbar {
+  grid-column: span 12;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fffaf0, #fff4df);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  z-index: 40;
+  transition: box-shadow 200ms ease;
+  user-select: none;
 }
 
-.left-pane.floating-tools.collapsed {
-  width: auto;
-  max-width: 210px;
-  overflow: hidden;
+.horizontal-toolbar.top {
+  order: -1;
+}
+
+.horizontal-toolbar.bottom {
+  order: 1;
+}
+
+.horizontal-toolbar.dragging {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  opacity: 0.92;
+}
+
+/* Drag handle */
+.toolbar-drag-handle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 18px;
+  cursor: grab;
+  border-radius: 14px 14px 0 0;
+  background: linear-gradient(180deg, #f0e6d2, #e8dcc3);
+  transition: background 150ms ease;
+}
+
+.toolbar-drag-handle:hover {
+  background: linear-gradient(180deg, #e8dcc3, #ddd0b5);
+}
+
+.toolbar-drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-grip {
+  display: block;
+  width: 40px;
+  height: 4px;
+  border-radius: 4px;
+  background: #c4b494;
+}
+
+.horizontal-toolbar.bottom .toolbar-drag-handle {
+  border-radius: 0 0 14px 14px;
+  order: 1;
+}
+
+/* Main toolbar row */
+.toolbar-main-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.toolbar-toggle-btn {
+  white-space: nowrap;
+}
+
+.toolbar-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-quick-actions button {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+  border-radius: 8px;
+}
+
+.toolbar-status {
+  font-size: 0.82rem;
+  color: var(--ink-subtle);
+  white-space: nowrap;
+  margin-left: 0.3rem;
+}
+
+/* Expanded content */
+.toolbar-expanded-content {
+  padding: 0.6rem 0.8rem 0.8rem;
+  display: grid;
+  gap: 0.7rem;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 0 0 14px 14px;
+}
+
+.horizontal-toolbar.bottom .toolbar-expanded-content {
+  border-top: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+  order: 0;
+}
+
+.toolbar-section {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.toolbar-section h3 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.88rem;
+  color: var(--accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.toolbar-fields-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.toolbar-fields-row .compact-field {
+  min-width: 80px;
+}
+
+.toolbar-fields-row .compact-field input,
+.toolbar-fields-row .compact-field select {
+  max-width: 130px;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.5rem;
+}
+
+.toolbar-fields-row .compact-field input[type="color"] {
+  width: 48px;
+  min-height: 32px;
+  padding: 0.15rem;
+}
+
+.toolbar-fields-row .rotation-field {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 160px;
+}
+
+.rotation-value {
+  font-size: 0.82rem;
+  color: #8c6b47;
+  min-width: 36px;
+  text-align: right;
+}
+
+.toolbar-meta-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--ink-subtle);
+}
+
+.toolbar-actions-row {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-actions-row button {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+  border-radius: 8px;
+}
+
+.toolbar-toggles-row {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.horizontal-selector {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.horizontal-selector button {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
+  border-radius: 6px;
+}
+
+/* Collapsed toolbar */
+.horizontal-toolbar.collapsed .toolbar-main-row {
+  padding: 0.4rem 0.8rem;
+}
+
+/* Keep old floating-tools class for backward compat but hidden */
+.left-pane.floating-tools {
+  display: none;
 }
 
 .tools-panel-header {
@@ -354,6 +553,7 @@ button.secondary {
   grid-column: span 12;
   background: linear-gradient(180deg, #fffaf0, #fff4df);
   min-height: 75vh;
+  overflow: hidden;
 }
 
 .status-bar {
@@ -591,7 +791,7 @@ pre {
   }
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1024px) {
   .workspace-shell {
     grid-template-columns: repeat(12, 1fr);
   }
@@ -607,10 +807,12 @@ pre {
     grid-column: span 12;
   }
 
-  .left-pane.floating-tools {
-    position: static;
-    width: 100%;
-    max-height: none;
+  .horizontal-toolbar {
+    grid-column: span 12;
+  }
+
+  .toolbar-quick-actions {
+    flex-wrap: wrap;
   }
 
   .service-grid {
@@ -618,13 +820,62 @@ pre {
   }
 }
 
+@media (max-width: 768px) {
+  .horizontal-toolbar {
+    border-radius: 10px;
+  }
+
+  .toolbar-main-row {
+    gap: 0.4rem;
+  }
+
+  .toolbar-quick-actions button {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.78rem;
+  }
+
+  .toolbar-fields-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar-fields-row .compact-field {
+    min-width: 100%;
+  }
+
+  .toolbar-fields-row .compact-field input,
+  .toolbar-fields-row .compact-field select {
+    max-width: 100%;
+  }
+
+  .toolbar-toggles-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .viewer-stage-panel {
+    min-height: 50vh;
+  }
+}
+
 @media (max-width: 560px) {
   .viewer-page {
-    width: min(1120px, 100% - 1rem);
+    width: 100%;
+    margin: 0.5rem;
   }
 
   .panel {
-    padding: 0.82rem;
+    padding: 0.7rem;
+    border-radius: 12px;
+  }
+
+  .hero {
+    padding: 1rem;
+    border-radius: 14px;
+  }
+
+  .hero h1 {
+    font-size: 1.2rem;
   }
 
   .service-grid {
@@ -635,5 +886,27 @@ pre {
   .inline-fields {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .toolbar-main-row {
+    flex-wrap: wrap;
+  }
+
+  .toolbar-quick-actions {
+    width: 100%;
+  }
+
+  .viewer-stage-panel {
+    min-height: 40vh;
+  }
+
+  button {
+    font-size: 0.9rem;
+    padding: 0.6rem 0.8rem;
+  }
+
+  input, select {
+    font-size: 0.9rem;
+    padding: 0.5rem 0.6rem;
   }
 }
