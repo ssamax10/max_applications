@@ -44,6 +44,13 @@ function parseSvgDimensions(svgText: string): LayerDimensions | null {
     return null;
   }
 
+  // Reject oversized viewBox dimensions (> 2000) — these are CAD drawing units,
+  // not real pixel dimensions. The browser will compute naturalWidth/Height
+  // from the normalized SVG instead, avoiding 3% scale rendering.
+  if (width > 2000 || height > 2000) {
+    return null;
+  }
+
   return { width, height };
 }
 
@@ -70,6 +77,7 @@ type AnnotationLayerProps = {
   onDeselectBalloon?: () => void;
   onMoveBalloon?: (payload: { id: string; x: number; y: number }) => void;
   onRotateBalloon?: (payload: { id: string; rotation: number }) => void;
+  onStageRotationChange?: (rotation: number) => void;
   drawingLayerUrl?: string | null;
   drawingLayerFormat?: "SVG" | "PDF" | "DWG" | "DXF" | null;
   drawingLayerLabel?: string;
@@ -87,6 +95,7 @@ export function AnnotationLayer({
   onDeselectBalloon,
   onMoveBalloon,
   onRotateBalloon,
+  onStageRotationChange,
   drawingLayerUrl,
   drawingLayerFormat,
   drawingLayerLabel,
@@ -182,8 +191,9 @@ export function AnnotationLayer({
           const loadingTask = getDocument(layerUrl);
           const pdfDocument = await loadingTask.promise;
           const page = await pdfDocument.getPage(1);
-          const nativeViewport = page.getViewport({ scale: 1, rotation: 0 });
-          const renderScale = 1.5;
+          // ODA CAD PDFs have tiny default dimensions. Render at high scale
+          // so text and linework are crisp when displayed on screen.
+          const renderScale = 4.0;
           const viewport = page.getViewport({ scale: renderScale, rotation: 0 });
 
           const canvas = document.createElement("canvas");
@@ -197,10 +207,12 @@ export function AnnotationLayer({
           await page.render({ canvasContext: context, viewport }).promise;
 
           const image = new window.Image();
+          const displayWidth = Math.ceil(viewport.width / renderScale);
+          const displayHeight = Math.ceil(viewport.height / renderScale);
           image.onload = () => {
             if (!cancelled) {
               setDrawingLayerImage(image);
-              setDrawingLayerDimensions({ width: nativeViewport.width, height: nativeViewport.height });
+              setDrawingLayerDimensions({ width: displayWidth, height: displayHeight });
             }
           };
           image.onerror = () => {
@@ -222,16 +234,40 @@ export function AnnotationLayer({
 
       if (drawingLayerFormat === "SVG") {
         try {
+          // Always try to fetch SVG text to extract dimensions
           const svgResponse = await fetch(layerUrl as string);
           const svgText = await svgResponse.text();
           parsedDimensions = parseSvgDimensions(svgText);
-          if (!cancelled) {
+          if (parsedDimensions) {
             setDrawingLayerDimensions(parsedDimensions);
           }
         } catch {
-          if (!cancelled) {
-            setDrawingLayerDimensions(null);
-          }
+          // Failed to fetch SVG for dimension parsing — will fallback to natural image size
+        }
+        
+        if (!cancelled) {
+          const image = new window.Image();
+          image.onload = () => {
+            if (!cancelled) {
+              setDrawingLayerImage(image);
+              if (!parsedDimensions) {
+                const fallbackWidth = image.naturalWidth || image.width;
+                const fallbackHeight = image.naturalHeight || image.height;
+                if (fallbackWidth > 0 && fallbackHeight > 0) {
+                  setDrawingLayerDimensions({ width: fallbackWidth, height: fallbackHeight });
+                }
+              }
+            }
+          };
+          image.onerror = () => {
+            if (!cancelled) {
+              setDrawingLayerImage(null);
+              setDrawingLayerDimensions(null);
+            }
+          };
+          // Use the blob URL directly — avoids base64 size limits for large CAD SVGs
+          image.src = layerUrl as string;
+          return;
         }
       } else if (!cancelled) {
         setDrawingLayerDimensions(null);
@@ -385,6 +421,9 @@ export function AnnotationLayer({
       x: anchor.x - offsetX - (rotatedX * cos - rotatedY * sin),
       y: anchor.y - offsetY - (rotatedX * sin + rotatedY * cos),
     }, zoomScale));
+    
+    // Notify parent of rotation change
+    onStageRotationChange?.(normalizedRotation);
   }
 
   function rotateFromCenter(deltaDegrees: number) {
@@ -506,6 +545,10 @@ export function AnnotationLayer({
               width={drawingRenderWidth}
               height={drawingRenderHeight}
               opacity={0.94}
+              onMouseDown={(event: any) => {
+                event.cancelBubble = true;
+                onDeselectBalloon?.();
+              }}
             />
           ) : (
             <Text
@@ -539,37 +582,49 @@ export function AnnotationLayer({
               leaderAngle = Math.atan2(dy, dx);
             }
 
-            // Protrusion (arrow-head tab) attached to the circle, pointing toward leader
+            // Always show the wedge protrusion — point upward (-90°) if no leader
+            const wedgeDirection = hasLeader && leaderDistance > radius * 0.5 ? leaderAngle : -Math.PI / 2;
+
+            // Protrusion (arrow-head tab) attached to the circle
             const protrusionHeight = Math.min(12, radius * 0.5);
             const protrusionHalfAngle = Math.PI / 10; // ~18 degrees half-width
-            const balloonRotationRad = (balloonRotation * Math.PI) / 180;
-            const localLeaderAngle = leaderAngle;
-
-            const showProtrusion = hasLeader && leaderCanvasPoint && leaderDistance > radius + 4;
 
             // Protrusion vertices in local (Group) coordinates
-            // Base points on the circle circumference so wedge attaches seamlessly
-            const protrusionTipLocal = showProtrusion
-              ? {
-                  x: Math.cos(localLeaderAngle) * (radius + protrusionHeight),
-                  y: Math.sin(localLeaderAngle) * (radius + protrusionHeight),
-                }
-              : null;
-            const protrusionBaseLeft = showProtrusion
-              ? {
-                  x: Math.cos(localLeaderAngle - protrusionHalfAngle) * radius,
-                  y: Math.sin(localLeaderAngle - protrusionHalfAngle) * radius,
-                }
-              : null;
-            const protrusionBaseRight = showProtrusion
-              ? {
-                  x: Math.cos(localLeaderAngle + protrusionHalfAngle) * radius,
-                  y: Math.sin(localLeaderAngle + protrusionHalfAngle) * radius,
-                }
-              : null;
+            const protrusionTipLocal = {
+              x: Math.cos(wedgeDirection) * (radius + protrusionHeight),
+              y: Math.sin(wedgeDirection) * (radius + protrusionHeight),
+            };
+            const protrusionBaseLeft = {
+              x: Math.cos(wedgeDirection - protrusionHalfAngle) * radius,
+              y: Math.sin(wedgeDirection - protrusionHalfAngle) * radius,
+            };
+            const protrusionBaseRight = {
+              x: Math.cos(wedgeDirection + protrusionHalfAngle) * radius,
+              y: Math.sin(wedgeDirection + protrusionHalfAngle) * radius,
+            };
+
+            // Leader line starts from the wedge tip
+            const leaderLineFrom = { x: canvasPoint.x + protrusionTipLocal.x, y: canvasPoint.y + protrusionTipLocal.y };
 
             return [
-              // Balloon Group: circle + protrusion + text (rotatable together)
+              // Draw leader line first (behind the balloon) — only if leader coordinates exist
+              ...(hasLeader && leaderCanvasPoint && leaderDistance > radius * 0.5 ? [
+                <Line
+                  name="balloon-leader-line"
+                  key={`leader-${balloon.id}`}
+                  points={[
+                    leaderLineFrom.x,
+                    leaderLineFrom.y,
+                    leaderCanvasPoint.x,
+                    leaderCanvasPoint.y,
+                  ]}
+                  stroke={balloonColor}
+                  strokeWidth={2}
+                  lineCap="round"
+                  opacity={0.7}
+                />,
+              ] : []),
+              // Balloon Group: circle + wedge + text (rotatable together)
               <Group
                 name="balloon-layer"
                 id={`balloon-group-${balloon.id}`}
@@ -591,22 +646,17 @@ export function AnnotationLayer({
                 <Shape
                   sceneFunc={(context: any, shape: any) => {
                     context.beginPath();
-                    if (showProtrusion && protrusionTipLocal && protrusionBaseLeft && protrusionBaseRight) {
-                      // Draw the circle from wedge-end around to wedge-start (covering the circle except the wedge base)
-                      context.arc(
-                        0, 0, radius,
-                        localLeaderAngle + protrusionHalfAngle,   // wedge-end angle
-                        Math.PI * 2 + (localLeaderAngle - protrusionHalfAngle), // wedge-start angle (wrapped past 2π)
-                        false
-                      );
-                      // Line outward to wedge tip
-                      context.lineTo(protrusionTipLocal.x, protrusionTipLocal.y);
-                      // Line back to wedge-end on circle
-                      context.lineTo(protrusionBaseRight.x, protrusionBaseRight.y);
-                    } else {
-                      // No wedge — draw a full circle
-                      context.arc(0, 0, radius, 0, Math.PI * 2, false);
-                    }
+                    // Draw the circle from wedge-end around to wedge-start (covering the circle except the wedge base)
+                    context.arc(
+                      0, 0, radius,
+                      wedgeDirection + protrusionHalfAngle,   // wedge-end angle
+                      Math.PI * 2 + (wedgeDirection - protrusionHalfAngle), // wedge-start angle (wrapped past 2π)
+                      false
+                    );
+                    // Line outward to wedge tip
+                    context.lineTo(protrusionTipLocal.x, protrusionTipLocal.y);
+                    // Line back to wedge-end on circle
+                    context.lineTo(protrusionBaseRight.x, protrusionBaseRight.y);
                     context.closePath();
                     context.fillStrokeShape(shape);
                   }}

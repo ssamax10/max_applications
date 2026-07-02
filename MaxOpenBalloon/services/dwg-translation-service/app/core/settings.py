@@ -25,6 +25,14 @@ class ServiceSettings(BaseSettings):
     dwg_conversion_engine: str = 'qcad'
     qcad_cmd: str = '/usr/bin/qcad'
     qcad_script_path: str = '/app/app/scripts/qcad_dwg_to_pdf.js'
+    qcad_wrapper_cmd: str = 'xvfb-run --auto-servernum'
+    qcad_dwg2svg_cmd: str = '/usr/bin/dwg2svg'
+    qcad_dwg2pdf_cmd: str = '/usr/bin/dwg2pdf'
+
+    # Autodesk Platform Services (APS) for production DWG→PDF conversion
+    aps_client_id: str = 'nGVbKvuwlgYD1PDx8BWV6YEGxHRFpnHwShsueYf6FO1ToHpw'
+    aps_client_secret: str = 'NlBkaiA9lnSgXLLBrFUnXvP3QtpAuH7qAdkFwojuXsPUky51cgkDwO7IEjBcZndf'
+    aps_bucket_key: str = 'aps_shri_dwg_conversion_bucket'
 
 
 settings = ServiceSettings()

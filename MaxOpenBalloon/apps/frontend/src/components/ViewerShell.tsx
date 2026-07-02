@@ -12,10 +12,7 @@ import {
   runFeatureFlow,
   uploadDrawingFile,
   updateBalloon,
-  extractInspection,
   type BalloonRecord,
-  type InspectionCharacteristic,
-  type InspectionExtractionResult,
   type ServiceResult,
   type SessionContext,
   type TranslationJob,
@@ -194,6 +191,7 @@ export function ViewerShell() {
   const [exportPreviewOnly, setExportPreviewOnly] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const [editRotation, setEditRotation] = useState(0);
+  const [drawingRotation, setDrawingRotation] = useState(0);
   const [toolbarPosition, setToolbarPosition] = useState<"top" | "bottom">("top");
   const [isDraggingToolbar, setIsDraggingToolbar] = useState(false);
   const [toolbarDragStartY, setToolbarDragStartY] = useState(0);
@@ -389,8 +387,9 @@ export function ViewerShell() {
       setPreviewLoadError(null);
       if (detectedFormat === "DWG") {
         setIsConvertingPreview(true);
-        setLoadStatus("Converting DWG to PDF with QCAD...");
+        setLoadStatus("Converting DWG to PDF preview...");
         try {
+          // PDF via ODA dwg2pdf with proper flags (-a auto-fit, -paper=A3, etc.)
           const pdfJobResult = await convertDrawing(session, drawing.source_uri, "PDF");
           setPdfJob(pdfJobResult);
           const blobUrl = await resolveRemotePreviewUrl(pdfJobResult.output_uri);
@@ -402,7 +401,7 @@ export function ViewerShell() {
           });
           setPreviewAssetFormat("PDF");
           setSvgJob(null);
-          setLoadStatus("DWG preview ready with QCAD PDF base layer (aligned with detector coordinates).");
+          setLoadStatus("DWG preview ready with PDF base layer.");
         } catch (pdfPreviewError) {
           const pdfError = pdfPreviewError instanceof Error ? pdfPreviewError.message : "DWG PDF conversion failed";
           setPdfJob(null);
@@ -418,8 +417,8 @@ export function ViewerShell() {
               return blobUrl;
             });
             setPreviewAssetFormat("SVG");
-            setLoadStatus("DWG preview ready using SVG fallback (coordinate alignment may vary).");
-            setPreviewLoadError(`PDF-aligned preview unavailable: ${pdfError}`);
+            setLoadStatus("DWG preview ready using SVG fallback.");
+            setPreviewLoadError(`PDF preview unavailable: ${pdfError}`);
           } catch (svgPreviewError) {
             const svgError = svgPreviewError instanceof Error ? svgPreviewError.message : "DWG SVG preview failed";
             setPreviewLoadError(`${pdfError}. SVG preview failed: ${svgError}`);
@@ -481,79 +480,43 @@ export function ViewerShell() {
     }
 
     setError(null);
-    setLoadStatus("Running Auto Balloon...");
+    setLoadStatus("Running Auto Balloon via AI detector chain...");
 
     try {
-      // Try 5-stage inspection pipeline first (precise GD&T/dimension data)
-      const pdfBlob = selectedFile ?? (selectedFileUrl ? await fetch(selectedFileUrl).then(r => r.blob()) : null);
+      // Go directly to AI service detector chain (skips the broken 5-stage inspection pipeline)
+      // The AI service uses pdf_worker -> pdf_text -> paddleocr_opencv -> florence2 -> heuristic_fallback
       let created: BalloonRecord[] = [];
-      let usedDetector = "pdf_worker_5stage";
-      let attemptedDetectors = ["pdf_worker_5stage"];
+      let usedDetector = "ai_service_chain";
+      let attemptedDetectors: string[] = [];
 
-      if (pdfBlob) {
-        setLoadStatus("Stage 1-5: Extracting inspection characteristics...");
-        try {
-          const inspectionResult = await extractInspection(session, pdfBlob);
+      setLoadStatus("AI detector chain: extracting text positions from drawing...");
 
-          if (inspectionResult.characteristics.length > 0) {
-            setLoadStatus(`Creating ${inspectionResult.characteristics.length} balloons from inspection...`);
+      const aiResult = await autoBalloon(session, drawingId, undefined, detectorMode);
 
-            for (let index = 0; index < inspectionResult.characteristics.length; index++) {
-              const char = inspectionResult.characteristics[index];
-
-              const featureData = char.metadata?.feature_data as Record<string, unknown> | undefined;
-              const featureX = featureData?.center ? (featureData.center as { x: number }).x : 100 + (index * 50);
-              const featureY = featureData?.center ? (featureData.center as { y: number }).y : 100 + (index * 30);
-
-              const compassSlot = index % 4;
-              const compassAngles = [45, 135, 225, 315];
-              const placementAngle = (compassAngles[compassSlot] * Math.PI) / 180;
-              const placementDistance = 40;
-
-              const balloonX = Math.round(featureX + Math.cos(placementAngle) * placementDistance);
-              const balloonY = Math.round(featureY + Math.sin(placementAngle) * placementDistance);
-
-              const label = char.dimension ? `Ø${char.dimension}` : `F${char.characteristic}`;
-
-              const geometry: Record<string, unknown> = {
-                x: balloonX,
-                y: balloonY,
-                leader_x: featureX,
-                leader_y: featureY,
-                leader_type: "orthogonal",
-                size: 18,
-                fill_color: "transparent",
-                outline_color: balloonColor,
-                text_color: "#ffffff",
-                font_family: "Space Grotesk",
-              };
-
-              const createdBalloon = await createBalloon(session, drawingId, label, geometry);
-              created.push(createdBalloon);
-            }
-          }
-        } catch (inspectionError) {
-          // 5-stage pipeline failed, will fall through to AI service fallback
-          const msg = inspectionError instanceof Error ? inspectionError.message : "Inspection extraction failed";
-          setLoadStatus(`5-stage pipeline failed (${msg}), falling back to AI detector chain...`);
+      // Apply rotation transform to balloon coordinates if the drawing is rotated
+      const rotationRad = (drawingRotation * Math.PI) / 180;
+      const hasRotation = drawingRotation !== 0 && Number.isFinite(rotationRad);
+      
+      for (const suggestion of aiResult.balloons) {
+        if (hasRotation) {
+          const cos = Math.cos(rotationRad);
+          const sin = Math.sin(rotationRad);
+          const ox = typeof suggestion.geometry.x === "number" ? suggestion.geometry.x : 0;
+          const oy = typeof suggestion.geometry.y === "number" ? suggestion.geometry.y : 0;
+          const lx = typeof suggestion.geometry.leader_x === "number" ? suggestion.geometry.leader_x : 0;
+          const ly = typeof suggestion.geometry.leader_y === "number" ? suggestion.geometry.leader_y : 0;
+          
+          // Rotate around origin (0,0) — the drawing coordinate space
+          suggestion.geometry.x = Math.round(ox * cos - oy * sin);
+          suggestion.geometry.y = Math.round(ox * sin + oy * cos);
+          suggestion.geometry.leader_x = Math.round(lx * cos - ly * sin);
+          suggestion.geometry.leader_y = Math.round(lx * sin + ly * cos);
         }
+        created.push(suggestion);
       }
 
-      // Fallback: AI service detector chain with heuristic guarantee
-      if (created.length === 0) {
-        setLoadStatus("5-stage pipeline produced no results. Using AI detector chain with OCR fallback...");
-        usedDetector = "ai_service_fallback";
-        attemptedDetectors = ["pdf_worker_5stage", "ai_service_chain"];
-
-        const aiResult = await autoBalloon(session, drawingId, undefined, detectorMode);
-
-        for (const suggestion of aiResult.balloons) {
-          created.push(suggestion);
-        }
-
-        usedDetector = aiResult.detectorUsed;
-        attemptedDetectors = [...attemptedDetectors, ...aiResult.attemptedDetectors];
-      }
+      usedDetector = aiResult.detectorUsed;
+      attemptedDetectors = aiResult.attemptedDetectors;
 
       setBalloons((current) => {
         const existing = new Map(current.map((entry) => [entry.id, entry]));
@@ -596,10 +559,6 @@ export function ViewerShell() {
     setError(null);
     const bx = Number(editX);
     const by = Number(editY);
-    const leaderOffset = Number(editSize) * 2.5;
-    const leaderAngle = (editRotation * Math.PI) / 180;
-    const lx = Math.round(bx - Math.sin(leaderAngle) * leaderOffset);
-    const ly = Math.round(by + Math.cos(leaderAngle) * leaderOffset);
     try {
       const created = await createBalloon(
         session,
@@ -608,9 +567,6 @@ export function ViewerShell() {
         {
           x: bx,
           y: by,
-          leader_x: lx,
-          leader_y: ly,
-          leader_type: "straight",
           size: Number(editSize),
           fill_color: editNoFill ? "transparent" : editFillColor,
           outline_color: editOutlineColor,
@@ -727,8 +683,12 @@ export function ViewerShell() {
   }
 
   async function saveBalloonChanges() {
-    if (!session || !selectedBalloon) {
-      setError("Create a balloon before editing.");
+    if (!session) {
+      setError("Sign in before saving.");
+      return;
+    }
+    if (!selectedBalloon) {
+      setLoadStatus("No balloon selected. Select a balloon to edit its properties.");
       return;
     }
 
@@ -754,6 +714,35 @@ export function ViewerShell() {
     } catch (editError) {
       setError(editError instanceof Error ? editError.message : "Failed to update balloon");
     }
+  }
+
+  function closeDrawing() {
+    // Reset all drawing-related state so a fresh file can be loaded
+    if (selectedFileUrl) {
+      URL.revokeObjectURL(selectedFileUrl);
+    }
+    if (viewerAssetUrl) {
+      URL.revokeObjectURL(viewerAssetUrl);
+    }
+    setDrawingId(null);
+    setBalloons([]);
+    setSelectedBalloonId(null);
+    setSvgJob(null);
+    setPdfJob(null);
+    setViewerAssetUrl(null);
+    setPreviewAssetFormat(null);
+    setSelectedFile(null);
+    setSelectedFileUrl(null);
+    setSourceUri("minio://drawings/ui-sample-1.dwg");
+    setSourceFormat("DWG");
+    setResult(null);
+    setAiSuggestionCount(0);
+    setLastDetectorUsed(null);
+    setLastAttemptedDetectors([]);
+    setLastCanvasAction(null);
+    setPreviewLoadError(null);
+    setLoadStatus("Drawing closed. Select a new file to load.");
+    setDrawingRotation(0);
   }
 
   function openDesktopBrowse() {
@@ -1024,7 +1013,8 @@ export function ViewerShell() {
 
     const width = Number(stage.width());
     const height = Number(stage.height());
-    const image = stage.toDataURL({ pixelRatio: 2 });
+    // Use 4x pixel ratio for high-resolution export
+    const image = stage.toDataURL({ pixelRatio: 4 });
 
     const pdf = new jsPDF({
       orientation: width >= height ? "landscape" : "portrait",
@@ -1061,12 +1051,13 @@ export function ViewerShell() {
       const bounds = drawingNode.getClientRect({ skipShadow: true });
       const width = Math.max(1, Math.ceil(bounds.width));
       const height = Math.max(1, Math.ceil(bounds.height));
+      // Use 4x pixel ratio for high-resolution, full-size export
       const image = stage.toDataURL({
         x: bounds.x,
         y: bounds.y,
         width,
         height,
-        pixelRatio: 2,
+        pixelRatio: 4,
       });
 
       const pdf = new jsPDF({
@@ -1220,13 +1211,18 @@ export function ViewerShell() {
               <button type="button" onClick={() => { void loadDrawing(); }} disabled={!session || !selectedFile || isLoadingDrawing}>
                 {isLoadingDrawing ? "Loading..." : "Load Drawing"}
               </button>
+              {drawingId ? (
+                <button type="button" className="secondary" onClick={closeDrawing}>
+                  Close Drawing
+                </button>
+              ) : null}
               <button type="button" onClick={runAutoBalloon} disabled={!drawingId || !session}>
                 Auto Balloon
               </button>
               <button type="button" onClick={addBalloonFromEditor} disabled={!drawingId || !session}>
                 Add Balloon
               </button>
-              <button type="button" onClick={saveBalloonChanges} disabled={!selectedBalloon || !session}>
+              <button type="button" onClick={saveBalloonChanges} disabled={!drawingId || !session}>
                 Save
               </button>
               <button type="button" className="secondary" onClick={() => void deleteSelectedBalloon()} disabled={!selectedBalloon || !session}>
@@ -1440,6 +1436,9 @@ export function ViewerShell() {
                 }}
                 onRotateBalloon={(payload) => {
                   void rotateBalloonOnCanvas(payload.id, payload.rotation);
+                }}
+                onStageRotationChange={(rotation) => {
+                  setDrawingRotation(rotation);
                 }}
                 onCanvasClick={(point) => {
                   void placeBalloonFromCanvas(point.x, point.y);

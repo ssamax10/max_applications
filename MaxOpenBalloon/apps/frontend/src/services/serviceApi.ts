@@ -322,7 +322,11 @@ export async function autoBalloon(
     throw new Error("No AI suggestions generated");
   }
 
-  const outlinePalette = ["#d7651f", "#bf2d55", "#d3aa2f", "#049169", "#0f6a8a"];
+  // Use uniform colors across ALL balloons instead of per-index palette
+  const uniformFillColor = "#ffeddc";
+  const uniformOutlineColor = "#800000";
+  const uniformTextColor = "#000000";
+  const uniformFontFamily = "Space Grotesk";
   const balloons: BalloonRecord[] = [];
   const coordinateDebug: AutoBalloonCoordinateDebug[] = [];
 
@@ -354,13 +358,45 @@ export async function autoBalloon(
     const suggestedSize = typeof suggestion.geometry.size === "number" && suggestion.geometry.size > 0
       ? suggestion.geometry.size
       : 18 + (index % 2) * 2;
-    // Use 4-position compass (NE/NW/SE/SW) based on position hash so balloons fan out
-    // around their dimension anchors rather than piling on top of each other.
-    const compassSlot = Math.abs(Math.round((detectedX * 11) + (detectedY * 5) + (index * 23))) % 4;
-    const compassAngles = [45, 135, 225, 315]; // NE, NW, SW, SE in degrees
-    const placementAngle = (compassAngles[compassSlot] * Math.PI) / 180;
-    // Keep callouts close to the detected dimension while retaining a visible leader.
+    
+    // Use 8-position compass (N/NE/E/SE/S/SW/W/NW) for better distribution
+    // and collision avoidance with existing placed balloons
+    const compassAngles = [0, 45, 90, 135, 180, 225, 270, 315]; // N, NE, E, SE, S, SW, W, NW in degrees
+    
+    // Pick the best direction that avoids overlapping with already-placed balloons
     const placementDistance = Math.max(14, (suggestedSize / 2) + 6);
+    let bestAngle = compassAngles[Math.abs(Math.round((detectedX * 11) + (detectedY * 5) + (index * 23))) % 8];
+    let bestOverlap = Number.MAX_SAFE_INTEGER;
+    
+    // Check each compass direction for overlap with previously created balloons
+    for (const candidateAngle of compassAngles) {
+      const rad = (candidateAngle * Math.PI) / 180;
+      const cx = detectedX + Math.cos(rad) * placementDistance;
+      const cy = detectedY + Math.sin(rad) * placementDistance;
+      
+      // Check overlap with all previously placed balloons
+      let maxOverlap = 0;
+      for (const existing of balloons) {
+        const ex = typeof existing.geometry.x === "number" ? existing.geometry.x : 0;
+        const ey = typeof existing.geometry.y === "number" ? existing.geometry.y : 0;
+        const distance = Math.hypot(cx - ex, cy - ey);
+        const minDist = (suggestedSize / 2) + (18 / 2) + 20; // half-sizes + margin
+        if (distance < minDist) {
+          const overlap = minDist - distance;
+          if (overlap > maxOverlap) {
+            maxOverlap = overlap;
+          }
+        }
+      }
+      
+      if (maxOverlap < bestOverlap) {
+        bestOverlap = maxOverlap;
+        bestAngle = candidateAngle;
+        if (maxOverlap === 0) break; // Found a non-overlapping position
+      }
+    }
+    
+    const placementAngle = (bestAngle * Math.PI) / 180;
     const geometry = {
       ...suggestion.geometry,
       x: Math.round(detectedX + Math.cos(placementAngle) * placementDistance),
@@ -375,13 +411,9 @@ export async function autoBalloon(
             ? suggestion.geometry.color
             : "transparent"
         ),
-      outline_color: typeof suggestion.geometry.outline_color === "string" && suggestion.geometry.outline_color
-        ? suggestion.geometry.outline_color
-        : outlinePalette[index % outlinePalette.length],
-      text_color: "#000000",
-      font_family: typeof suggestion.geometry.font_family === "string" && suggestion.geometry.font_family
-        ? suggestion.geometry.font_family
-        : "Space Grotesk",
+      outline_color: uniformOutlineColor,
+      text_color: uniformTextColor,
+      font_family: uniformFontFamily,
     };
 
     const created = await requestJson<BalloonRecord>(
@@ -534,7 +566,7 @@ export async function deleteBalloon(session: SessionContext, balloonId: string):
 export async function convertDrawing(
   session: SessionContext,
   sourceUri: string,
-  targetFormat: "SVG" | "PDF",
+  targetFormat: "SVG" | "PDF" | "DXF",
 ): Promise<TranslationJob> {
   return requestJson<TranslationJob>(
     `${serviceBase(servicePorts.dwg)}/translate/dwg`,

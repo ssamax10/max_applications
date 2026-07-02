@@ -1,5 +1,7 @@
 import structlog
 
+logger = structlog.get_logger("dwg-translation-service")
+
 
 def configure_logging() -> None:
     structlog.configure(

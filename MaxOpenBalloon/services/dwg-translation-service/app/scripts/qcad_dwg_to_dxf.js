@@ -1,16 +1,12 @@
 /*
- * QCAD autostart script: convert DWG input to SVG output.
- *
- * QCAD Community Edition does NOT support direct PDF export (that's a Pro-only
- * feature). Instead we export to SVG, and the dwg-translation-service routes.py
- * converts that SVG to PDF via PyMuPDF (fitz).
- *
- * Usage from CLI: qcad -no-gui -autostart <this-file> -- <input> <output.svg>
+ * QCAD autostart script: convert DWG input to DXF output.
+ * Uses Community Edition compatible APIs (RFileImporter, RFileExporter).
+ * Usage from CLI: qcad -no-gui -autostart <this-file> -- <input> <output>
  */
 
 function main() {
     if (typeof args === "undefined" || !args || args.length < 2) {
-        qWarning("Missing input/output arguments for DWG->SVG conversion (PDF via Community Edition)");
+        qWarning("Missing input/output arguments for DWG->DXF conversion");
         if (typeof qApp !== "undefined") { qApp.exit(1); }
         return;
     }
@@ -24,7 +20,7 @@ function main() {
     var doc = new RDocument(storage, spatialIndex);
     var di = new RDocumentInterface(doc);
 
-    // Import DWG using direct RFileImporter (Community Edition compatible)
+    // Import DWG using direct RFileImporter (not registry-based Pro API)
     var importer = new RFileImporter(di, inputPath);
     if (isNull(importer)) {
         qWarning("Failed to create importer for: " + inputPath);
@@ -39,23 +35,22 @@ function main() {
         return;
     }
 
-    // Export as SVG using direct RFileExporter (Community Edition supports SVG export)
-    // QCAD Community can produce SVG via the SVG export filter
-    var exporter = new RFileExporter(di, outputPath, "SVG");
+    // Export as DXF using direct RFileExporter (works in Community edition)
+    var exporter = new RFileExporter(di, outputPath, "DXF");
     if (isNull(exporter)) {
-        qWarning("Failed to create SVG exporter for: " + outputPath);
+        qWarning("Failed to create DXF exporter for: " + outputPath);
         if (typeof qApp !== "undefined") { qApp.exit(1); }
         return;
     }
 
     success = exporter.exportFile();
     if (!success) {
-        qWarning("Failed to export SVG: " + outputPath);
+        qWarning("Failed to export DXF: " + outputPath);
         if (typeof qApp !== "undefined") { qApp.exit(1); }
         return;
     }
 
-    qDebug("QCAD Community DWG->SVG conversion done: " + inputPath + " -> " + outputPath);
+    qDebug("QCAD DWG->DXF conversion done: " + inputPath + " -> " + outputPath);
 }
 
 main();

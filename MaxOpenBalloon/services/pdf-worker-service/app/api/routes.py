@@ -21,13 +21,24 @@ from app.domain.inspection_models import InspectionResult
 
 router = APIRouter()
 
-DIMENSION_REGEX = re.compile(
-    r"^(?:"
-    r"(?:M\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)?)|"
-    r"(?:[ODR]?\s*\d+(?:\.\d+)?(?:\s*(?:x|X)\s*\d+(?:\.\d+)?)?)|"
-    r"(?:\d+(?:\.\d+)?\s*(?:mm|cm|m|in|\")?)"
-    r")(?:\s*(?:\+/?-?|\u00b1)\s*\d+(?:\.\d+)?)?$",
-    re.IGNORECASE,
+# Unified balloon text pattern: accepts dimension text AND balloon labels
+# Dimension examples: 10, 10.5, 10mm, M12, M12x1.5, Ø12, Ø12H7, 10±0.05, 10+0.1/-0.05
+# Balloon label examples: B-001, ITEM-1, PartA, 1, 01, A-1
+BALLOON_TEXT_PATTERN = re.compile(
+    r'^(?:'
+    # Dimension numbers with optional unit
+    r'(?:\d+(?:\.\d+)?\s*(?:mm|cm|m|in|")?(?:\s*[±+\-]\s*\d+(?:\.\d+)?)?)|'
+    # Thread specs: M12, M12x1.5, M12x1.5-6H
+    r'(?:M\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)?(?:-\d+[A-Z])?)|'
+    # Diameter symbols: Ø12, Ø12H7, Ø12h6, D12, R5
+    r'(?:[ODR]?\s*\d+(?:\.\d+)?(?:\s*[xX]\s*\d+(?:\.\d+)?)?(?:[A-Z]{1,2}\d+)?)|'
+    # Tolerance: ±0.05, +0.1/-0.05
+    r'(?:[±+\-]\s*\d+(?:\.\d+)?(?:\s*/\s*[±+\-]\s*\d+(?:\.\d+)?)?)|'
+    # Balloon labels: B-001, ITEM-1, A1, 01, etc.
+    r'(?:[A-Za-z]{0,3}[- ]?\d{1,4}[A-Za-z]?)|'
+    # Pure numbers (1-9999)
+    r'(?:\d{1,4})'
+    r')$'
 )
 
 _PADDLE_OCR = None
@@ -121,7 +132,7 @@ def _vector_fast_path(page: fitz.Page, max_suggestions: int) -> list[ExtractSugg
             continue
         if _is_title_or_margin_zone(x0, y0, x1, y1, width, height):
             continue
-        if not DIMENSION_REGEX.match(text.replace(" ", "")):
+        if not BALLOON_TEXT_PATTERN.match(text.replace(" ", "")):
             continue
 
         center_x = (x0 + x1) / 2.0
@@ -134,6 +145,45 @@ def _vector_fast_path(page: fitz.Page, max_suggestions: int) -> list[ExtractSugg
                 y=center_y,
                 bbox=[x0, y0, x1, y1],
                 stage="vector_fast_path",
+            )
+        )
+        if len(suggestions) >= max_suggestions:
+            break
+
+    return suggestions
+
+
+def _vector_all_text(page: fitz.Page, max_suggestions: int) -> list[ExtractSuggestion]:
+    """Extract ALL text words from the PDF page, filtering only title/margin zones.
+    
+    Unlike _vector_fast_path, this does NOT require BALLOON_TEXT_PATTERN matching.
+    This ensures we always get some text positions to work with for balloon placement.
+    """
+    words = page.get_text("words")
+    width = float(page.rect.width)
+    height = float(page.rect.height)
+
+    suggestions: list[ExtractSuggestion] = []
+    for item in words:
+        if len(item) < 5:
+            continue
+
+        x0, y0, x1, y1, text = float(item[0]), float(item[1]), float(item[2]), float(item[3]), str(item[4]).strip()
+        if not text:
+            continue
+        if _is_title_or_margin_zone(x0, y0, x1, y1, width, height):
+            continue
+
+        center_x = (x0 + x1) / 2.0
+        center_y = (y0 + y1) / 2.0
+        suggestions.append(
+            ExtractSuggestion(
+                text=text,
+                confidence=0.85,
+                x=center_x,
+                y=center_y,
+                bbox=[x0, y0, x1, y1],
+                stage="vector_all_text",
             )
         )
         if len(suggestions) >= max_suggestions:
@@ -554,6 +604,7 @@ async def extract(
     request: Request,
     max_suggestions: int = Query(default=40, ge=1, le=200),
     dpi: int = Query(default=settings.default_dpi, ge=200, le=600),
+    text_only: bool = Query(default=False, description="Extract ALL text without dimension regex filtering"),
 ) -> ExtractResponse:
     payload = await request.body()
     if not payload:
@@ -578,6 +629,24 @@ async def extract(
         "used_dpi": dpi,
         "tile_size": settings.tile_size,
     }
+
+    # If text_only mode is requested, skip dimension regex filtering
+    if text_only:
+        suggestions = _vector_all_text(page, max_suggestions)
+        if suggestions:
+            return ExtractResponse(
+                mode="vector_text_only",
+                profile=profile,
+                diagnostics={
+                    "phase1": "Text-only mode: extracted all text words without dimension regex filtering",
+                    "phase2": f"Found {len(suggestions)} text words outside title/margin zones",
+                    "phase3": "No dimension regex applied — all text positions returned",
+                    "phase4": "Balloon points anchored to text word centers",
+                },
+                suggestions=suggestions,
+            )
+        # Fall through to OCR if no vector text found
+        profile["vector_word_count"] = 0
 
     vector_suggestions = []
     if len(profile_words) >= settings.vector_word_threshold:
@@ -646,7 +715,7 @@ async def extract(
 
             if confidence < 0.35:
                 continue
-            if not DIMENSION_REGEX.match(text.replace(" ", "")):
+            if not BALLOON_TEXT_PATTERN.match(text.replace(" ", "")):
                 continue
 
             points = [(float(p[0]) + tx, float(p[1]) + ty) for p in box]
@@ -658,7 +727,8 @@ async def extract(
             x1 = max(p[0] for p in points)
             y1 = max(p[1] for p in points)
 
-            key = (text.upper().replace(" ", ""), int(gx // 8), int(gy // 8))
+            # Use a larger dedup radius (20px) to catch cross-tile duplicates
+            key = (text.upper().replace(" ", ""), int(gx // 20), int(gy // 20))
             if key in seen_keys:
                 continue
             seen_keys.add(key)
@@ -677,6 +747,25 @@ async def extract(
     candidates.sort(key=lambda item: item.confidence, reverse=True)
     candidates = candidates[:max_suggestions]
 
+    # Apply clearance point optimization to find best balloon anchor positions
+    # that avoid crossing drawing lines
+    if candidates:
+        # Create a binary mask from the rendered page for clearance computation
+        _, binary_mask = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+        
+        for candidate in candidates:
+            # Convert candidate position back to pixel coordinates for clearance computation
+            px = int(candidate.x * scale)
+            py = int(candidate.y * scale)
+            
+            # Find a clearance point that avoids drawing lines
+            clearance_x, clearance_y = _clearance_point(binary_mask, px, py, pix.width, pix.height)
+            
+            # Update the suggestion with the clearance-optimized position
+            candidate.x = clearance_x / scale
+            candidate.y = clearance_y / scale
+            candidate.stage = "raster_ocr_clearance"
+
     return ExtractResponse(
         mode="raster",
         profile=profile,
@@ -684,7 +773,7 @@ async def extract(
             "phase1": "No reliable vector fast path hit; rendered PDF at high DPI",
             "phase2": f"Detected {len(viewports)} viewport regions and generated {len(tiles)} OCR tiles",
             "phase3": f"OCR candidate count after regex filtering: {len(candidates)}",
-            "phase4": "Anchored balloon coordinates to detected dimension text centers",
+            "phase4": "Anchored balloon coordinates to detected dimension text centers with clearance optimization",
         },
         suggestions=candidates,
     )

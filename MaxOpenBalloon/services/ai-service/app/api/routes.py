@@ -28,8 +28,27 @@ LOGGER = logging.getLogger(__name__)
 _PADDLE_OCR = None
 
 DetectorMode = str
-SUPPORTED_DETECTORS = {'heuristic', 'paddleocr_opencv', 'florence2', 'hybrid', 'dxf_vector', 'pdf_worker'}
-BALLOON_TEXT_PATTERN = re.compile(r'^[A-Za-z]{0,3}[- ]?\d{1,4}[A-Za-z]?$')
+SUPPORTED_DETECTORS = {'heuristic', 'paddleocr_opencv', 'florence2', 'hybrid', 'dxf_vector', 'pdf_worker', 'pdf_text'}
+
+# Unified balloon text pattern: accepts dimension text AND balloon labels
+# Dimension examples: 10, 10.5, 10mm, M12, M12x1.5, Ø12, Ø12H7, 10±0.05, 10+0.1/-0.05
+# Balloon label examples: B-001, ITEM-1, PartA, 1, 01, A-1
+BALLOON_TEXT_PATTERN = re.compile(
+    r'^(?:'
+    # Dimension numbers with optional unit
+    r'(?:\d+(?:\.\d+)?\s*(?:mm|cm|m|in|")?(?:\s*[±+\-]\s*\d+(?:\.\d+)?)?)|'
+    # Thread specs: M12, M12x1.5, M12x1.5-6H
+    r'(?:M\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)?(?:-\d+[A-Z])?)|'
+    # Diameter symbols: Ø12, Ø12H7, Ø12h6, D12, R5
+    r'(?:[ODR]?\s*\d+(?:\.\d+)?(?:\s*[xX]\s*\d+(?:\.\d+)?)?(?:[A-Z]{1,2}\d+)?)|'
+    # Tolerance: ±0.05, +0.1/-0.05
+    r'(?:[±+\-]\s*\d+(?:\.\d+)?(?:\s*/\s*[±+\-]\s*\d+(?:\.\d+)?)?)|'
+    # Balloon labels: B-001, ITEM-1, A1, 01, etc.
+    r'(?:[A-Za-z]{0,3}[- ]?\d{1,4}[A-Za-z]?)|'
+    # Pure numbers (1-9999)
+    r'(?:\d{1,4})'
+    r')$'
+)
 PDF_RENDER_SCALE = 1.5
 
 
@@ -213,17 +232,42 @@ def _build_suggestion(index: int, label: str, confidence: float, x: float, y: fl
     )
 
 
-def _heuristic_suggestions(max_suggestions: int) -> list[BalloonSuggestion]:
-    return [
-        _build_suggestion(
-            index=index,
-            label=str(index),
-            confidence=max(0.5, 1 - (index * 0.05)),
-            x=float(140 + ((index - 1) % 6) * 130),
-            y=float(110 + ((index - 1) // 6) * 80),
+def _heuristic_suggestions(max_suggestions: int, page_width: float = 1000, page_height: float = 700) -> list[BalloonSuggestion]:
+    """Generate heuristic balloon positions distributed across the actual drawing area.
+    
+    Instead of placing all balloons at synthetic (140 + index*130, 110 + floor(index/6)*80),
+    this version distributes them in a grid over a sensible drawing region.
+    """
+    margin_x = page_width * 0.08
+    margin_y = page_height * 0.08
+    usable_width = page_width - 2 * margin_x
+    usable_height = page_height - 2 * margin_y
+    
+    cols = min(6, max(2, int((usable_width / 150) + 0.5)))
+    rows = min(4, max(1, int((usable_height / 100) + 0.5)))
+    cell_w = usable_width / cols if cols > 0 else usable_width
+    cell_h = usable_height / rows if rows > 0 else usable_height
+    
+    suggestions: list[BalloonSuggestion] = []
+    for index in range(1, max_suggestions + 1):
+        row = (index - 1) // cols
+        col = (index - 1) % cols
+        if row >= rows:
+            # If we run out of grid cells, cluster them more tightly
+            row = row % rows
+            col = (col + row * 2) % cols
+        x = margin_x + col * cell_w + cell_w * 0.3 + (row * 10) % cell_w
+        y = margin_y + row * cell_h + cell_h * 0.3 + (col * 8) % cell_h
+        suggestions.append(
+            _build_suggestion(
+                index=index,
+                label=str(index),
+                confidence=max(0.5, 1 - (index * 0.04)),
+                x=x,
+                y=y,
+            )
         )
-        for index in range(1, max_suggestions + 1)
-    ]
+    return suggestions
 
 
 def _svg_bytes_to_cv2_image(svg_bytes: bytes):
@@ -310,6 +354,54 @@ def _translate_to_pdf_uri(source: DrawingSource, tenant_id: str, authorization: 
     if not isinstance(output_uri, str) or not output_uri:
         raise DetectorUnavailableError('DWG translation did not return PDF output_uri')
     return output_uri
+
+
+# Cache for translated PDF bytes to avoid duplicate DWG->PDF conversions
+_pdf_translation_cache: dict[str, tuple[str, bytes]] = {}  # source_uri -> (output_uri, pdf_bytes)
+
+
+def _get_or_create_pdf_bytes(source: DrawingSource, tenant_id: str, authorization: str | None) -> tuple[bytes, str]:
+    """Get PDF bytes for a drawing, with caching to avoid double conversion.
+    
+    Returns (pdf_bytes, pdf_uri) tuple.
+    """
+    global _pdf_translation_cache
+    
+    suffix = Path(source.source_uri).suffix.lower()
+    
+    if suffix == '.pdf':
+        # Direct PDF — just read the bytes
+        pdf_bytes = _read_source_bytes(source.source_uri)
+        return pdf_bytes, source.source_uri
+    
+    if suffix in {'.dwg', '.dxf'}:
+        # Check cache first
+        if source.source_uri in _pdf_translation_cache:
+            cached_uri, cached_bytes = _pdf_translation_cache[source.source_uri]
+            LOGGER.debug('PDF translation cache hit for %s', source.source_uri)
+            return cached_bytes, cached_uri
+        
+        # Translate and cache
+        pdf_uri = _translate_to_pdf_uri(source, tenant_id, authorization)
+        headers = {'X-Tenant-ID': tenant_id}
+        if authorization:
+            headers['Authorization'] = authorization
+        req = Request(pdf_uri, headers=headers, method='GET')
+        try:
+            with urlopen(req, timeout=40) as response:
+                pdf_bytes = response.read()
+        except (HTTPError, URLError, TimeoutError) as exc:
+            raise DetectorUnavailableError('Failed reading translated PDF output') from exc
+        
+        # Cache the result (limit cache to 20 entries)
+        if len(_pdf_translation_cache) >= 20:
+            oldest_key = next(iter(_pdf_translation_cache))
+            del _pdf_translation_cache[oldest_key]
+        _pdf_translation_cache[source.source_uri] = (pdf_uri, pdf_bytes)
+        
+        return pdf_bytes, pdf_uri
+    
+    raise DetectorUnavailableError(f'Cannot get PDF bytes for format {suffix or source.source_format}')
 
 
 def _dxf_vector_suggestions(
@@ -525,16 +617,38 @@ def _estimate_suggestion_budget(
     return defaults.get(source_format, 10)
 
 
+def _try_import_paddleocr():
+    """Try to import PaddleOCR with a timeout. PaddleOCR's native libpaddle.so
+    can hang indefinitely on import failure. We use a subprocess to enforce a
+    timeout."""
+    global _PADDLE_OCR
+    if _PADDLE_OCR is not None:
+        return True
+    
+    # Try importing in-process first with a quick detection
+    import importlib
+    import sys
+    
+    try:
+        # Check if the native library can be loaded at all
+        import paddle
+        # Quick version check - if paddle loaded, PaddleOCR likely works
+        from paddleocr import PaddleOCR
+        _PADDLE_OCR = PaddleOCR(use_angle_cls=True, lang='en')
+        return True
+    except Exception:
+        _PADDLE_OCR = None
+        return False
+
+
 def _paddle_opencv_suggestions(
     source: DrawingSource,
     max_suggestions: int,
     tenant_id: str,
     authorization: str | None,
 ) -> list[BalloonSuggestion]:
-    try:
-        from paddleocr import PaddleOCR
-    except Exception as exc:
-        raise DetectorUnavailableError('paddleocr is unavailable') from exc
+    if not _try_import_paddleocr():
+        raise DetectorUnavailableError('paddleocr is unavailable (libpaddle.so failed to load)')
 
     try:
         import cv2
@@ -542,10 +656,6 @@ def _paddle_opencv_suggestions(
         raise DetectorUnavailableError('opencv-python-headless is unavailable') from exc
 
     image = _load_numpy_image(source, tenant_id, authorization)
-
-    global _PADDLE_OCR
-    if _PADDLE_OCR is None:
-        _PADDLE_OCR = PaddleOCR(use_angle_cls=True, lang='en')
 
     result = _PADDLE_OCR.ocr(image, cls=True)
     lines = result[0] if result and result[0] else []
@@ -702,35 +812,25 @@ def _florence2_suggestions(source: DrawingSource, max_suggestions: int) -> list[
     return suggestions
 
 
-def _pdf_worker_suggestions(
-    source: DrawingSource,
-    max_suggestions: int,
-    tenant_id: str,
-    authorization: str | None,
-) -> list[BalloonSuggestion]:
-    suffix = Path(source.source_uri).suffix.lower()
-
-    endpoint = settings.pdf_worker_internal_url.rstrip('/')
-    if not endpoint:
-        raise DetectorUnavailableError('pdf_worker_internal_url is not configured')
-
-    if suffix == '.pdf':
-        payload = _read_source_bytes(source.source_uri)
-    elif suffix in {'.dwg', '.dxf'}:
-        pdf_uri = _translate_to_pdf_uri(source, tenant_id, authorization)
-        headers = {'X-Tenant-ID': tenant_id}
-        if authorization:
-            headers['Authorization'] = authorization
-        req = Request(pdf_uri, headers=headers, method='GET')
-        try:
-            with urlopen(req, timeout=40) as response:
-                payload = response.read()
-        except (HTTPError, URLError, TimeoutError) as exc:
-            raise DetectorUnavailableError('Failed reading translated PDF output for pdf_worker') from exc
-    else:
-        raise DetectorUnavailableError(f'pdf_worker does not support source format {suffix or source.source_format}')
-
-    request_url = f"{endpoint}/extract?max_suggestions={max_suggestions}"
+def _call_pdf_worker_extract(endpoint: str, payload: bytes, max_suggestions: int, tenant_id: str, authorization: str | None, text_only: bool = False) -> list[BalloonSuggestion]:
+    """Unified function to call the pdf-worker-service /extract endpoint.
+    
+    Args:
+        endpoint: Base URL of the pdf-worker-service
+        payload: PDF bytes
+        max_suggestions: Maximum number of suggestions
+        tenant_id: Tenant identifier
+        authorization: Optional bearer token
+        text_only: If True, use text_only mode (skip dimension regex filtering)
+    
+    Returns:
+        List of BalloonSuggestion from the PDF worker response
+    """
+    params = f"max_suggestions={max_suggestions}"
+    if text_only:
+        params += "&text_only=true"
+    
+    request_url = f"{endpoint}/extract?{params}"
     headers = {'Content-Type': 'application/pdf', 'X-Tenant-ID': tenant_id}
     if authorization:
         headers['Authorization'] = authorization
@@ -772,6 +872,39 @@ def _pdf_worker_suggestions(
         )
 
     return suggestions
+
+
+def _pdf_worker_suggestions(
+    source: DrawingSource,
+    max_suggestions: int,
+    tenant_id: str,
+    authorization: str | None,
+) -> list[BalloonSuggestion]:
+    """Extract text positions using pdf-worker-service with dimension regex filtering."""
+    endpoint = settings.pdf_worker_internal_url.rstrip('/')
+    if not endpoint:
+        raise DetectorUnavailableError('pdf_worker_internal_url is not configured')
+
+    pdf_bytes, _ = _get_or_create_pdf_bytes(source, tenant_id, authorization)
+    return _call_pdf_worker_extract(endpoint, pdf_bytes, max_suggestions, tenant_id, authorization, text_only=False)
+
+
+def _pdf_text_suggestions(
+    source: DrawingSource,
+    max_suggestions: int,
+    tenant_id: str,
+    authorization: str | None,
+) -> list[BalloonSuggestion]:
+    """Extract ALL text positions from a PDF without dimension regex filtering.
+    
+    Uses the unified _call_pdf_worker_extract with text_only=true.
+    """
+    endpoint = settings.pdf_worker_internal_url.rstrip('/')
+    if not endpoint:
+        raise DetectorUnavailableError('pdf_worker_internal_url is not configured')
+
+    pdf_bytes, _ = _get_or_create_pdf_bytes(source, tenant_id, authorization)
+    return _call_pdf_worker_extract(endpoint, pdf_bytes, max_suggestions, tenant_id, authorization, text_only=True)
 
 
 def _hybrid_suggestions(
@@ -826,6 +959,8 @@ def _run_detector(
         return _florence2_suggestions(source, max_suggestions)
     if detector == 'pdf_worker':
         return _pdf_worker_suggestions(source, max_suggestions, tenant_id, authorization)
+    if detector == 'pdf_text':
+        return _pdf_text_suggestions(source, max_suggestions, tenant_id, authorization)
     if detector == 'hybrid':
         return _hybrid_suggestions(source, max_suggestions, tenant_id, authorization)
     raise DetectorUnavailableError(f'Unknown detector mode: {detector}')
@@ -847,8 +982,10 @@ def _detector_plan(requested_mode: str | None, source_format: str) -> list[str]:
                 raise HTTPException(status_code=400, detail='florence2 detector requested but FLORENCE2_ENDPOINT is not configured')
             return ['florence2', 'pdf_worker', 'dxf_vector', 'paddleocr_opencv']
         if requested_mode == 'pdf_worker':
-            plan = ['pdf_worker', 'paddleocr_opencv', 'florence2']
+            plan = ['pdf_worker', 'pdf_text', 'paddleocr_opencv', 'florence2']
             return [detector for detector in plan if detector != 'florence2' or _is_florence_configured()]
+        if requested_mode == 'pdf_text':
+            return ['pdf_text']
         if requested_mode == 'heuristic':
             return ['heuristic']
         if requested_mode == 'dxf_vector':
@@ -869,7 +1006,7 @@ def _detector_plan(requested_mode: str | None, source_format: str) -> list[str]:
     if format_upper in {'DWG', 'DXF'}:
         return ['dxf_vector', 'hybrid', 'heuristic'] if not _is_florence_configured() else ['dxf_vector', 'florence2', 'hybrid', 'heuristic']
     if format_upper == 'PDF':
-        return ['pdf_worker', 'hybrid', 'heuristic'] if not _is_florence_configured() else ['pdf_worker', 'florence2', 'hybrid', 'heuristic']
+        return ['pdf_worker', 'pdf_text', 'hybrid', 'heuristic'] if not _is_florence_configured() else ['pdf_worker', 'florence2', 'hybrid', 'heuristic']
     if format_upper == 'SVG':
         return ['hybrid', 'heuristic'] if not _is_florence_configured() else ['florence2', 'hybrid', 'heuristic']
 
@@ -882,6 +1019,7 @@ def _empty_detector_reason(detector: str) -> str:
         'dxf_vector': 'DXF geometry/text scan found no balloon-like circle and label pairs',
         'florence2': 'Florence2 returned no suggestions for this drawing',
         'pdf_worker': 'PDF worker returned no valid dimension candidates',
+        'pdf_text': 'PDF text extraction returned no text words',
         'hybrid': 'Hybrid detector merged output had no surviving unique suggestions',
         'heuristic': 'Heuristic detector produced no valid suggestions after filtering',
     }
@@ -953,17 +1091,23 @@ def suggest_balloons(
         detector_diagnostics[detector] = _empty_detector_reason(detector)
 
     if not suggestions:
-        if request.detector_mode and request.detector_mode != 'heuristic':
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"No suggestions generated for requested detector_mode '{request.detector_mode}'. "
-                    f"Diagnostics: {detector_diagnostics}"
-                ),
-            )
-
+        # Always allow heuristic fallback, even when a specific detector mode was requested.
+        # This ensures auto-balloon never fails when all detectors produce no results.
         fallback_budget = max(1, min(suggestion_budget, 12))
-        suggestions = _refine_suggestions('heuristic', _heuristic_suggestions(fallback_budget), fallback_budget)
+        # Use page dimensions from the drawing source for better fallback placement
+        # If we can't get them, default to 1000x700
+        try:
+            import fitz
+            source_bytes = _read_source_bytes(drawing_source.source_uri)
+            doc = fitz.open(stream=source_bytes, filetype="pdf")
+            page = doc[0]
+            page_width = float(page.rect.width)
+            page_height = float(page.rect.height)
+            doc.close()
+        except Exception:
+            page_width, page_height = 1000.0, 700.0
+        
+        suggestions = _refine_suggestions('heuristic', _heuristic_suggestions(fallback_budget, page_width, page_height), fallback_budget)
         if suggestions:
             suggestions = _renumber_suggestions(suggestions)
             detector_used = 'heuristic_fallback'

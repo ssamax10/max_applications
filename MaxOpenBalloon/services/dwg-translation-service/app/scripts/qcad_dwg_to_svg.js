@@ -1,16 +1,15 @@
 /*
  * QCAD autostart script: convert DWG input to SVG output.
  *
- * QCAD Community Edition does NOT support direct PDF export (that's a Pro-only
- * feature). Instead we export to SVG, and the dwg-translation-service routes.py
- * converts that SVG to PDF via PyMuPDF (fitz).
+ * Uses Community Edition compatible APIs (direct RFileImporter, RFileExporter).
+ * This is the same as qcad_dwg_to_pdf.js but explicitly named for SVG output.
  *
  * Usage from CLI: qcad -no-gui -autostart <this-file> -- <input> <output.svg>
  */
 
 function main() {
     if (typeof args === "undefined" || !args || args.length < 2) {
-        qWarning("Missing input/output arguments for DWG->SVG conversion (PDF via Community Edition)");
+        qWarning("Missing input/output arguments for DWG->SVG conversion");
         if (typeof qApp !== "undefined") { qApp.exit(1); }
         return;
     }
@@ -40,7 +39,6 @@ function main() {
     }
 
     // Export as SVG using direct RFileExporter (Community Edition supports SVG export)
-    // QCAD Community can produce SVG via the SVG export filter
     var exporter = new RFileExporter(di, outputPath, "SVG");
     if (isNull(exporter)) {
         qWarning("Failed to create SVG exporter for: " + outputPath);
