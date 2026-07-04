@@ -19,6 +19,7 @@ class ServiceSettings(BaseSettings):
     detector_order: str = 'pdf_worker,paddleocr_opencv,florence2,hybrid,heuristic'
     florence2_endpoint: str = ''
     florence2_timeout_seconds: int = 20
+    detector_timeout_seconds: int = 20
     pdf_worker_internal_url: str = 'http://pdf-worker-service:8000'
     pdf_worker_timeout_seconds: int = 180
 

@@ -1,12 +1,14 @@
 ﻿import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import unquote
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from time import perf_counter
 from uuid import UUID, NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
@@ -92,6 +94,37 @@ class DrawingSource(BaseModel):
 
 class DetectorUnavailableError(RuntimeError):
     pass
+
+
+def _run_detector_with_timeout(
+    detector: str,
+    source: DrawingSource,
+    max_suggestions: int,
+    tenant_id: str,
+    authorization: str | None,
+) -> list[BalloonSuggestion]:
+    started_at = perf_counter()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_run_detector, detector, source, max_suggestions, tenant_id, authorization)
+        try:
+            suggestions = future.result(timeout=settings.detector_timeout_seconds)
+        except FuturesTimeoutError as exc:
+            elapsed = perf_counter() - started_at
+            LOGGER.warning(
+                'Detector %s timed out after %.2fs (limit=%ss)',
+                detector,
+                elapsed,
+                settings.detector_timeout_seconds,
+            )
+            raise DetectorUnavailableError(
+                f'Detector {detector} timed out after {elapsed:.2f}s'
+            ) from exc
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    elapsed = perf_counter() - started_at
+    LOGGER.info('Detector %s finished in %.2fs with %d suggestions', detector, elapsed, len(suggestions))
+    return suggestions
 
 
 def _tenant_uuid(tenant_id: str) -> UUID:
@@ -1072,24 +1105,34 @@ def suggest_balloons(
 
     for detector in detector_plan:
         attempted_detectors.append(detector)
+        LOGGER.info('Starting detector %s for drawing %s', detector, request.drawing_id)
+        started_at = perf_counter()
         try:
-            suggestions = _run_detector(detector, drawing_source, suggestion_budget, context.tenant_id, authorization)
+            suggestions = _run_detector_with_timeout(
+                detector,
+                drawing_source,
+                suggestion_budget,
+                context.tenant_id,
+                authorization,
+            )
         except DetectorUnavailableError as exc:
             reason = str(exc) or 'Detector unavailable'
             detector_diagnostics[detector] = reason
             LOGGER.warning('Detector %s unavailable: %s', detector, reason)
             continue
 
+        elapsed = perf_counter() - started_at
         suggestions = _refine_suggestions(detector, suggestions, suggestion_budget)
 
         if suggestions:
             suggestions = _renumber_suggestions(suggestions)
             detector_used = detector
             detector_diagnostics[detector] = f'Success: {len(suggestions)} suggestions'
-            LOGGER.info('Detector %s succeeded with %d suggestions', detector, len(suggestions))
+            LOGGER.info('Detector %s succeeded in %.2fs with %d suggestions', detector, elapsed, len(suggestions))
             break
 
         detector_diagnostics[detector] = _empty_detector_reason(detector)
+        LOGGER.info('Detector %s returned no suggestions after %.2fs', detector, elapsed)
 
     if not suggestions:
         # Always allow heuristic fallback, even when a specific detector mode was requested.
