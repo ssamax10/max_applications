@@ -46,7 +46,7 @@ services:
   ai-service:
     replicas: 3
     image:
-      tag: v1.0.1
+      tag: v1.0.2
       pullPolicy: Always
   mcp-service:
     replicas: 3
@@ -57,7 +57,7 @@ services:
   pdf-worker-service:
     replicas: 3
     image:
-      tag: v1.0.0
+      tag: v1.0.1
       pullPolicy: Always
   postgres:
     replicas: 1

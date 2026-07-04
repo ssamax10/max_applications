@@ -688,6 +688,19 @@ async def extract(
             suggestions=vector_suggestions,
         )
 
+    if not settings.enable_paddle_ocr:
+        return ExtractResponse(
+            mode="vector_no_ocr",
+            profile=profile,
+            diagnostics={
+                "phase1": "Vector path did not produce suggestions",
+                "phase2": "Paddle OCR fallback is disabled by service configuration",
+                "phase3": "Enable OCR only on nodes with a verified compatible paddle runtime",
+                "phase4": "Returning empty suggestions to allow upstream detector fallback",
+            },
+            suggestions=[],
+        )
+
     scale = float(dpi) / 72.0
     mat = fitz.Matrix(scale, scale)
     pix = page.get_pixmap(matrix=mat, alpha=False)

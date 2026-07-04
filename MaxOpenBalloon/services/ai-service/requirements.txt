@@ -13,7 +13,7 @@ minio==7.2.12
 psycopg[binary]==3.2.3
 numpy==1.26.4
 opencv-python-headless==4.10.0.84
-paddlepaddle==3.0.0
+paddlepaddle==2.6.2
 paddleocr==2.8.1
 pypdfium2==4.30.0
 cairosvg==2.7.1

@@ -10,6 +10,7 @@ class ServiceSettings(BaseSettings):
     tile_overlap: float = 0.15
     max_pdf_bytes: int = 30 * 1024 * 1024
     vector_word_threshold: int = 8
+    enable_paddle_ocr: bool = True
 
 
 settings = ServiceSettings()
