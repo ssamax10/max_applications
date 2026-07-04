@@ -1,5 +1,5 @@
 global:
-  imageTag: v0.9.4
+  imageTag: v1.0.0
   imagePullPolicy: IfNotPresent
 
 auth:
@@ -21,7 +21,7 @@ services:
   frontend:
     replicas: 3
     image:
-      tag: v0.9.5
+      tag: v1.0.0
       pullPolicy: Always
     env:
       VITE_DRAWING_API_BASE: http://maxopenballoon-drawing-service:8000
@@ -53,7 +53,7 @@ services:
   pdf-worker-service:
     replicas: 3
     image:
-      tag: v0.9.4
+      tag: v1.0.0
       pullPolicy: Always
   postgres:
     replicas: 1
