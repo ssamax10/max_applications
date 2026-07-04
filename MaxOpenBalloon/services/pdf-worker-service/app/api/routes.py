@@ -117,10 +117,13 @@ def _is_title_or_margin_zone(x0: float, y0: float, x1: float, y1: float, width: 
     return False
 
 
-def _vector_fast_path(page: fitz.Page, max_suggestions: int) -> list[ExtractSuggestion]:
+def _vector_fast_path(page: fitz.Page, max_suggestions: int, allow_sparse: bool = False) -> list[ExtractSuggestion]:
     words = page.get_text("words")
     width = float(page.rect.width)
     height = float(page.rect.height)
+
+    if not allow_sparse and len(words) < settings.vector_word_threshold:
+        return []
 
     suggestions: list[ExtractSuggestion] = []
     for item in words:
@@ -623,11 +626,13 @@ async def extract(
 
     page = doc[0]
     profile_words = page.get_text("words")
+    pdf_type = _optimized_extractor.pdf_type_detector.detect(payload)
     profile = {
         "page_count": doc.page_count,
         "vector_word_count": len(profile_words),
         "used_dpi": dpi,
         "tile_size": settings.tile_size,
+        "pdf_type": pdf_type,
     }
 
     # If text_only mode is requested, skip dimension regex filtering
@@ -647,6 +652,24 @@ async def extract(
             )
         # Fall through to OCR if no vector text found
         profile["vector_word_count"] = 0
+
+    if pdf_type in {"vector", "hybrid"}:
+        vector_suggestions = _vector_fast_path(page, max_suggestions, allow_sparse=True)
+        if not vector_suggestions:
+            vector_suggestions = _vector_all_text(page, max_suggestions)
+
+        if vector_suggestions:
+            return ExtractResponse(
+                mode="vector",
+                profile=profile,
+                diagnostics={
+                    "phase1": f"PyMuPDF classified the PDF as {pdf_type}; vector text extraction used before OCR",
+                    "phase2": f"Found {len(vector_suggestions)} vector-anchored text candidates",
+                    "phase3": "Regex-filtered vector words preferred; sparse vector PDFs fall back to all text words",
+                    "phase4": "Balloon points anchored to PyMuPDF text boxes",
+                },
+                suggestions=vector_suggestions,
+            )
 
     vector_suggestions = []
     if len(profile_words) >= settings.vector_word_threshold:
