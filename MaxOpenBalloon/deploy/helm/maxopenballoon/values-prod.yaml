@@ -45,6 +45,9 @@ services:
     replicas: 3
   ai-service:
     replicas: 3
+    image:
+      tag: v1.0.1
+      pullPolicy: Always
   mcp-service:
     replicas: 3
   revision-service:
