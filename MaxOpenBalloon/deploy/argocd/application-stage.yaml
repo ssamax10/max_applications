@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ssamax10/max_applications.git
-    targetRevision: HEAD
+    targetRevision: main
     path: MaxOpenBalloon/deploy/helm/maxopenballoon
     helm:
       valueFiles:
