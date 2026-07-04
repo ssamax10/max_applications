@@ -20,6 +20,9 @@ class ServiceSettings(BaseSettings):
     florence2_endpoint: str = ''
     florence2_timeout_seconds: int = 20
     detector_timeout_seconds: int = 20
+    detector_chain_timeout_seconds: int = 120
+    detector_circuit_open_seconds: int = 180
+    max_active_detector_jobs: int = 6
     pdf_worker_internal_url: str = 'http://pdf-worker-service:8000'
     pdf_worker_timeout_seconds: int = 180
 

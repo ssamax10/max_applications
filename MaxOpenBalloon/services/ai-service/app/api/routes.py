@@ -1,6 +1,7 @@
 ﻿import json
 import logging
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,9 @@ router = APIRouter()
 _SCHEMA_READY = False
 LOGGER = logging.getLogger(__name__)
 _PADDLE_OCR = None
+_DETECTOR_CIRCUIT_UNTIL: dict[str, float] = {}
+_ACTIVE_DETECTOR_JOBS = 0
+_DETECTOR_STATE_LOCK = threading.Lock()
 
 DetectorMode = str
 SUPPORTED_DETECTORS = {'heuristic', 'paddleocr_opencv', 'florence2', 'hybrid', 'dxf_vector', 'pdf_worker', 'pdf_text'}
@@ -96,6 +100,14 @@ class DetectorUnavailableError(RuntimeError):
     pass
 
 
+def _detector_timeout_seconds(detector: str) -> int:
+    if detector in {'pdf_worker', 'pdf_text'}:
+        return settings.pdf_worker_timeout_seconds
+    if detector == 'florence2':
+        return settings.florence2_timeout_seconds
+    return settings.detector_timeout_seconds
+
+
 def _run_detector_with_timeout(
     detector: str,
     source: DrawingSource,
@@ -103,24 +115,37 @@ def _run_detector_with_timeout(
     tenant_id: str,
     authorization: str | None,
 ) -> list[BalloonSuggestion]:
-    started_at = perf_counter()
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_run_detector, detector, source, max_suggestions, tenant_id, authorization)
-        try:
-            suggestions = future.result(timeout=settings.detector_timeout_seconds)
-        except FuturesTimeoutError as exc:
-            elapsed = perf_counter() - started_at
-            LOGGER.warning(
-                'Detector %s timed out after %.2fs (limit=%ss)',
-                detector,
-                elapsed,
-                settings.detector_timeout_seconds,
-            )
+    global _ACTIVE_DETECTOR_JOBS
+
+    with _DETECTOR_STATE_LOCK:
+        if _ACTIVE_DETECTOR_JOBS >= settings.max_active_detector_jobs:
             raise DetectorUnavailableError(
-                f'Detector {detector} timed out after {elapsed:.2f}s'
-            ) from exc
-        finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+                f'Detector backlog cap reached ({_ACTIVE_DETECTOR_JOBS}/{settings.max_active_detector_jobs})'
+            )
+        _ACTIVE_DETECTOR_JOBS += 1
+
+    started_at = perf_counter()
+    timeout_seconds = _detector_timeout_seconds(detector)
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_run_detector, detector, source, max_suggestions, tenant_id, authorization)
+    try:
+        suggestions = future.result(timeout=timeout_seconds)
+    except FuturesTimeoutError as exc:
+        elapsed = perf_counter() - started_at
+        LOGGER.warning(
+            'Detector %s timed out after %.2fs (limit=%ss)',
+            detector,
+            elapsed,
+            timeout_seconds,
+        )
+        future.cancel()
+        raise DetectorUnavailableError(
+            f'Detector {detector} timed out after {elapsed:.2f}s'
+        ) from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+        with _DETECTOR_STATE_LOCK:
+            _ACTIVE_DETECTOR_JOBS = max(0, _ACTIVE_DETECTOR_JOBS - 1)
 
     elapsed = perf_counter() - started_at
     LOGGER.info('Detector %s finished in %.2fs with %d suggestions', detector, elapsed, len(suggestions))
@@ -1102,8 +1127,32 @@ def suggest_balloons(
     attempted_detectors: list[str] = []
     detector_diagnostics: dict[str, str] = {}
     detector_used = 'none'
+    chain_started_at = perf_counter()
 
     for detector in detector_plan:
+        chain_elapsed = perf_counter() - chain_started_at
+        if chain_elapsed > settings.detector_chain_timeout_seconds:
+            detector_diagnostics['chain_timeout'] = (
+                f'Detector chain time budget exceeded after {chain_elapsed:.2f}s '
+                f'(limit={settings.detector_chain_timeout_seconds}s)'
+            )
+            LOGGER.warning(
+                'Detector chain timeout for drawing %s after %.2fs (limit=%ss)',
+                request.drawing_id,
+                chain_elapsed,
+                settings.detector_chain_timeout_seconds,
+            )
+            break
+
+        now = perf_counter()
+        circuit_until = _DETECTOR_CIRCUIT_UNTIL.get(detector, 0.0)
+        if now < circuit_until:
+            remaining = circuit_until - now
+            detector_diagnostics[detector] = f'Skipped: circuit open for {remaining:.1f}s'
+            LOGGER.info('Skipping detector %s due to open circuit (%.1fs remaining)', detector, remaining)
+            attempted_detectors.append(detector)
+            continue
+
         attempted_detectors.append(detector)
         LOGGER.info('Starting detector %s for drawing %s', detector, request.drawing_id)
         started_at = perf_counter()
@@ -1117,6 +1166,14 @@ def suggest_balloons(
             )
         except DetectorUnavailableError as exc:
             reason = str(exc) or 'Detector unavailable'
+            reason_lower = reason.lower()
+            if any(token in reason_lower for token in ('timed out', 'remotedisconnected', 'urlerror', 'connection', 'backlog cap')):
+                open_until = perf_counter() + settings.detector_circuit_open_seconds
+                _DETECTOR_CIRCUIT_UNTIL[detector] = open_until
+                reason = (
+                    f'{reason}. Circuit opened for {settings.detector_circuit_open_seconds}s '
+                    f'to avoid backend backlog accumulation'
+                )
             detector_diagnostics[detector] = reason
             LOGGER.warning('Detector %s unavailable: %s', detector, reason)
             continue
