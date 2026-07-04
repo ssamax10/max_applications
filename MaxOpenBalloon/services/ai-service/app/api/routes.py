@@ -1077,7 +1077,7 @@ def suggest_balloons(
         except DetectorUnavailableError as exc:
             reason = str(exc) or 'Detector unavailable'
             detector_diagnostics[detector] = reason
-            LOGGER.warning('Detector unavailable', extra={'detector': detector, 'reason': reason})
+            LOGGER.warning('Detector %s unavailable: %s', detector, reason)
             continue
 
         suggestions = _refine_suggestions(detector, suggestions, suggestion_budget)
@@ -1086,6 +1086,7 @@ def suggest_balloons(
             suggestions = _renumber_suggestions(suggestions)
             detector_used = detector
             detector_diagnostics[detector] = f'Success: {len(suggestions)} suggestions'
+            LOGGER.info('Detector %s succeeded with %d suggestions', detector, len(suggestions))
             break
 
         detector_diagnostics[detector] = _empty_detector_reason(detector)
